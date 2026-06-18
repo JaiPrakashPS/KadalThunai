@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "KadalThunai",
+    "slug": "kadal-thunai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A1628"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.kadalthunai.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "KadalThunai needs location access for SOS and fishing zone navigation.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "KadalThunai needs location access for SOS alerts.",
+        "NSCameraUsageDescription": "KadalThunai needs camera access to report incidents with photos.",
+        "NSPhotoLibraryUsageDescription": "KadalThunai needs photo library access to attach photos to reports.",
+        "NSMotionUsageDescription": "KadalThunai needs motion sensor access for the digital compass."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A1628"
+      },
+      "package": "com.kadalthunai.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "VIBRATE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-location",
+      "expo-image-picker",
+      "expo-font"
+    ],
+    "updates": {
+      "enabled": false
+    },
+    "extra": {
+      "API_BASE_URL": "http://10.50.177.123:5000/api/v1"
+    }
+  }
+}
