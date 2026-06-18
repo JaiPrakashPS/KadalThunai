@@ -21,7 +21,7 @@ const INFO_ITEMS = [
 ];
 
 export default function ProfileScreen({ navigation }) {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const { isConnected } = useNetwork();
   const { lang, changeLanguage } = useLanguage();
   
@@ -41,6 +41,19 @@ export default function ProfileScreen({ navigation }) {
     engineNo: '',
   });
 
+  // Edit Profile Form State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    phone: '',
+    licenseNo: '',
+    village: '',
+    district: '',
+    designation: '',
+    badgeNo: '',
+  });
+
   const L = {
     en: {
       title: 'Profile', myProfile: 'My Profile', personalInfo: 'Personal Information',
@@ -54,6 +67,11 @@ export default function ProfileScreen({ navigation }) {
       addBoat: 'Register Boat', boatName: 'Boat Name *', boatReg: 'Registration No *',
       boatType: 'Boat Type', boatCap: 'Crew Capacity', boatEng: 'Engine Number',
       cancel: 'Cancel', register: 'Register',
+      editTitle: 'Edit Profile Info', save: 'Save Details',
+      nameLabel: 'Full Name *', phoneLabel: 'Phone Number *',
+      licenseLabel: 'License Number', villageLabel: 'Village',
+      districtLabel: 'District', designationLabel: 'Designation',
+      badgeLabel: 'Badge Number *', saving: 'Saving...',
     },
     ta: {
       title: 'சுயவிவரம்', myProfile: 'என் சுயவிவரம்', personalInfo: 'தனிப்பட்ட தகவல்',
@@ -67,6 +85,11 @@ export default function ProfileScreen({ navigation }) {
       addBoat: 'படகு பதிவு செய்', boatName: 'படகு பெயர் *', boatReg: 'பதிவு எண் *',
       boatType: 'படகு வகை', boatCap: 'ஊழியர்கள் கொள்ளளவு', boatEng: 'இயந்திர எண்',
       cancel: 'ரத்து', register: 'பதிவு செய்',
+      editTitle: 'சுயவிவர திருத்தம்', save: 'சேமிக்க',
+      nameLabel: 'முழு பெயர் *', phoneLabel: 'தொலைபேசி எண் *',
+      licenseLabel: 'உரிம எண்', villageLabel: 'கிராமம்',
+      districtLabel: 'மாவட்டம்', designationLabel: 'பதவி',
+      badgeLabel: 'பேட்ஜ் எண் *', saving: 'சேமிக்கப்படுகிறது...',
     },
   }[lang];
 
@@ -164,6 +187,94 @@ export default function ProfileScreen({ navigation }) {
     }
   };
 
+  const handleEditProfile = () => {
+    const profileData = profile?.profile || {};
+    setEditForm({
+      name: user?.name || '',
+      phone: user?.phone || '',
+      licenseNo: profileData.licenseNo || profileData.license_no || '',
+      village: profileData.village || '',
+      district: profileData.district || '',
+      designation: profileData.designation || '',
+      badgeNo: profileData.badgeNo || profileData.badge_number || profileData.badgeNo || '',
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editForm.name.trim() || !editForm.phone.trim()) {
+      Alert.alert(
+        lang === 'ta' ? 'விடுபட்ட புலங்கள்' : 'Missing Fields',
+        lang === 'ta' ? 'பெயர் மற்றும் தொலைபேசி எண் தேவை' : 'Name and Phone number are required.'
+      );
+      return;
+    }
+
+    const cleanPhone = editForm.phone.trim();
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      Alert.alert(
+        lang === 'ta' ? 'தவறான தொலைபேசி எண்' : 'Invalid Phone Number',
+        lang === 'ta' ? 'தயவுசெய்து 6-9 இல் தொடங்கும் 10 இலக்க இந்திய தொலைபேசி எண்ணை உள்ளிடவும்.' : 'Please enter a valid 10-digit Indian phone number starting with 6-9.'
+      );
+      return;
+    }
+
+    if (isOfficer && !editForm.badgeNo.trim()) {
+      Alert.alert(
+        lang === 'ta' ? 'விடுபட்ட புலங்கள்' : 'Missing Fields',
+        lang === 'ta' ? 'பேட்ஜ் எண் தேவை' : 'Badge number is required.'
+      );
+      return;
+    }
+
+    setEditSubmitting(true);
+    try {
+      if (!isConnected) {
+        Alert.alert(
+          lang === 'ta' ? 'இணையம் இல்லை' : 'Offline Mode',
+          lang === 'ta' ? 'விவரங்களைச் சேமிக்க இணைய இணைப்பு தேவை' : 'Internet connection is required to update profile.'
+        );
+        setEditSubmitting(false);
+        return;
+      }
+
+      const payload = {
+        name: editForm.name.trim(),
+        phone: cleanPhone,
+      };
+
+      if (isOfficer) {
+        payload.designation = editForm.designation.trim();
+        payload.district = editForm.district.trim();
+        payload.badgeNo = editForm.badgeNo.trim();
+      } else {
+        payload.licenseNo = editForm.licenseNo.trim();
+        payload.village = editForm.village.trim();
+        payload.district = editForm.district.trim();
+      }
+
+      const res = await api.put(ENDPOINTS.MY_PROFILE, payload);
+      
+      if (res.data.success) {
+        const { user: updatedUser, profile: updatedProfile } = res.data.data;
+        await updateUser(updatedUser);
+        setProfile(res.data.data);
+        Alert.alert(
+          lang === 'ta' ? 'வெற்றி' : 'Success',
+          lang === 'ta' ? 'சுயவிவரம் வெற்றிகரமாக புதுப்பிக்கப்பட்டது!' : 'Profile updated successfully!'
+        );
+        setShowEditModal(false);
+      }
+    } catch (err) {
+      Alert.alert(
+        lang === 'ta' ? 'பிழை' : 'Error',
+        err?.response?.data?.message || (lang === 'ta' ? 'சேமிக்க முடியவில்லை' : 'Failed to save profile.')
+      );
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
   const avatarLetter = (user?.name || 'U').charAt(0).toUpperCase();
   const isOfficer = user?.role === 'officer';
 
@@ -197,9 +308,14 @@ export default function ProfileScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{L.title}</Text>
-        <TouchableOpacity style={styles.headerLogout} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={22} color={COLORS.danger} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <TouchableOpacity style={styles.headerEdit} onPress={handleEditProfile}>
+            <Ionicons name="create-outline" size={22} color={COLORS.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerLogout} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={22} color={COLORS.danger} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -378,6 +494,108 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Edit Profile Modal */}
+      <Modal visible={showEditModal} transparent animationType="slide" onRequestClose={() => setShowEditModal(false)}>
+        <View style={styles.modalOverlay}>
+          <ScrollView contentContainerStyle={{ justifyContent: 'center', flexGrow: 1, padding: 20 }} keyboardShouldPersistTaps="handled">
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalTitle}>{L.editTitle}</Text>
+              
+              <Text style={styles.fieldLabel}>{L.nameLabel}</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder={lang === 'ta' ? 'உங்கள் பெயர்' : 'Your name'}
+                placeholderTextColor={COLORS.textMuted}
+                value={editForm.name}
+                onChangeText={val => setEditForm(f => ({ ...f, name: val }))}
+              />
+
+              <Text style={styles.fieldLabel}>{L.phoneLabel}</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="e.g. 9876543210"
+                placeholderTextColor={COLORS.textMuted}
+                keyboardType="phone-pad"
+                maxLength={10}
+                value={editForm.phone}
+                onChangeText={val => setEditForm(f => ({ ...f, phone: val }))}
+              />
+
+              {!isOfficer ? (
+                <>
+                  <Text style={styles.fieldLabel}>{L.licenseLabel}</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="e.g. LIC-98765"
+                    placeholderTextColor={COLORS.textMuted}
+                    autoCapitalize="characters"
+                    value={editForm.licenseNo}
+                    onChangeText={val => setEditForm(f => ({ ...f, licenseNo: val }))}
+                  />
+
+                  <Text style={styles.fieldLabel}>{L.villageLabel}</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="e.g. Kovalam"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={editForm.village}
+                    onChangeText={val => setEditForm(f => ({ ...f, village: val }))}
+                  />
+
+                  <Text style={styles.fieldLabel}>{L.districtLabel}</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="e.g. Kanyakumari"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={editForm.district}
+                    onChangeText={val => setEditForm(f => ({ ...f, district: val }))}
+                  />
+                </>
+              ) : (
+                <>
+                  <Text style={styles.fieldLabel}>{L.designationLabel}</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="e.g. Inspector of Fisheries"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={editForm.designation}
+                    onChangeText={val => setEditForm(f => ({ ...f, designation: val }))}
+                  />
+
+                  <Text style={styles.fieldLabel}>{L.districtLabel}</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="e.g. Chennai"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={editForm.district}
+                    onChangeText={val => setEditForm(f => ({ ...f, district: val }))}
+                  />
+
+                  <Text style={styles.fieldLabel}>{L.badgeLabel}</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="e.g. OFF-123"
+                    placeholderTextColor={COLORS.textMuted}
+                    autoCapitalize="characters"
+                    value={editForm.badgeNo}
+                    onChangeText={val => setEditForm(f => ({ ...f, badgeNo: val }))}
+                  />
+                </>
+              )}
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalBtnCancel} onPress={() => setShowEditModal(false)}>
+                  <Text style={styles.modalBtnCancelText}>{L.cancel}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalBtnSubmit} onPress={handleSaveProfile} disabled={editSubmitting}>
+                  {editSubmitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.modalBtnSubmitText}>{L.save}</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -387,6 +605,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
   headerTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textPrimary },
   headerLogout: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.surface, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
+  headerEdit: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.surface, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
   content: { padding: SPACING.md, gap: SPACING.md },
 
   avatarCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: 28, alignItems: 'center', borderWidth: 2, borderColor: `${COLORS.primary}40`, ...SHADOWS.md },

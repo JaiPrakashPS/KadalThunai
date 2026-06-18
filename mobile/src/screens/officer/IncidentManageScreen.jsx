@@ -18,8 +18,8 @@ import { ENDPOINTS } from '../../constants/api';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/colors';
 import { useLanguage } from '../../store/LanguageContext';
 
-const getStatusLabel = (status = '', lang) => {
-  const s = status.toLowerCase().replace(/_/g, ' ');
+const getStatusLabel = (status, lang) => {
+  const s = (status || '').toLowerCase().replace(/_/g, ' ');
   if (lang === 'ta') {
     if (s === 'pending') return 'நிலுவையில்';
     if (s === 'in progress' || s === 'in_progress') return 'செயல்பாட்டில்';
@@ -79,7 +79,7 @@ const timeAgo = (dateStr) => {
   return `${Math.floor(diff / 86400)}d ago`;
 };
 
-const normalizeStatus = (status = '') => status.toLowerCase().replace(/_/g, ' ');
+const normalizeStatus = (status) => (status || '').toLowerCase().replace(/_/g, ' ');
 
 function IncidentCard({ item, onStatusUpdate }) {
   const { t, lang } = useLanguage();

@@ -26,8 +26,8 @@ export default function ComplaintResolveScreen({ navigation }) {
   const [officerResponse, setOfficerResponse] = useState('');
   const [updating, setUpdating] = useState(false);
 
-  const getStatusLabelLocal = (status = '') => {
-    const s = status.toLowerCase();
+  const getStatusLabelLocal = (status) => {
+    const s = (status || '').toLowerCase();
     if (s === 'submitted') return t('complaint.status.submitted') || 'Submitted';
     if (s === 'under_review') return t('complaint.status.under_review') || 'Under Review';
     if (s === 'resolved') return t('complaint.status.resolved') || 'Resolved';
