@@ -16,6 +16,20 @@ KadalThunai/
 
 ## Quick Start
 
+### Pull to your system (create a folder first)
+
+```bash
+mkdir -p ~/projects/KadalThunai
+cd ~/projects/KadalThunai
+git clone https://github.com/JaiPrakashPS/KadalThunai.git .
+```
+
+To pull latest updates later:
+
+```bash
+git pull origin main
+```
+
 ### Backend
 
 ```bash
