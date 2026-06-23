@@ -43,8 +43,9 @@ export const ENDPOINTS = {
   COMPLAINT_BY_ID: (id) => `/complaints/${id}`,
 
   // Market prices
-  MARKET_PRICES: '/market-prices',
-  MARKET_PRICES_LIVE: '/market-prices/fetch-live',
+  MARKET_PRICES: '/fish-prices',
+  MARKET_PRICES_LIVE: '/fish-prices/sync',
+  MARKET_PRICES_TRENDS: '/fish-prices/trends',
 
   // Schemes
   SCHEMES: '/schemes',

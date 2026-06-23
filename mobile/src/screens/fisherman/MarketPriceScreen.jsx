@@ -83,6 +83,33 @@ const THEME = {
   card: '#112352',
 };
 
+const normalizePrice = (p) => {
+  const fishName = p.fishName || p.species || 'Unknown';
+  const fishNameTamil = p.fishNameTamil || p.speciesTamil || p.species_tamil || '';
+  const wholesalePrice = p.wholesalePrice !== undefined ? p.wholesalePrice : (p.minPrice || p.min_price || 0);
+  const retailPrice = p.retailPrice !== undefined ? p.retailPrice : (p.price || 0);
+  const market = p.market || 'Unknown';
+  const district = p.district || 'Unknown';
+  const date = p.date || p.priceDate || p.price_date || new Date().toISOString();
+
+  // Compute mock yesterday_price based on date
+  const day = new Date(date).getDate();
+  const diff = Math.sin(day) * (retailPrice * 0.04);
+  const yesterday_price = retailPrice - diff;
+
+  return {
+    id: p._id || p.server_id || p.id,
+    fishName,
+    fishNameTamil,
+    wholesalePrice,
+    retailPrice,
+    market,
+    district,
+    date,
+    yesterday_price
+  };
+};
+
 export default function MarketPriceScreen({ navigation }) {
   const { isConnected } = useNetwork();
   const { t, lang } = useLanguage();
@@ -105,7 +132,8 @@ export default function MarketPriceScreen({ navigation }) {
       if (isConnected) {
         const response = await api.get(ENDPOINTS.MARKET_PRICES);
         const data = response.data?.data || response.data || [];
-        setPrices(data);
+        const normalized = data.map(normalizePrice);
+        setPrices(normalized);
         await cacheMarketPrices(data);
         setIsOffline(false);
       } else {
@@ -114,7 +142,8 @@ export default function MarketPriceScreen({ navigation }) {
     } catch (err) {
       try {
         const cached = await getCachedMarketPrices();
-        setPrices(cached || []);
+        const normalized = (cached || []).map(normalizePrice);
+        setPrices(normalized);
         setIsOffline(true);
       } catch {
         setPrices([]);
@@ -137,9 +166,9 @@ export default function MarketPriceScreen({ navigation }) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter(
         (item) =>
-          item.species_name?.toLowerCase().includes(q) ||
-          item.species_tamil?.toLowerCase().includes(q) ||
-          item.market_name?.toLowerCase().includes(q),
+          item.fishName?.toLowerCase().includes(q) ||
+          item.fishNameTamil?.toLowerCase().includes(q) ||
+          item.market?.toLowerCase().includes(q),
       );
     }
 
@@ -149,19 +178,19 @@ export default function MarketPriceScreen({ navigation }) {
 
     switch (sortBy) {
       case 'price_desc':
-        result.sort((a, b) => b.price_per_kg - a.price_per_kg);
+        result.sort((a, b) => b.retailPrice - a.retailPrice);
         break;
       case 'price_asc':
-        result.sort((a, b) => a.price_per_kg - b.price_per_kg);
+        result.sort((a, b) => a.retailPrice - b.retailPrice);
         break;
       case 'name_asc':
         result.sort((a, b) =>
-          (a.species_name || '').localeCompare(b.species_name || ''),
+          (a.fishName || '').localeCompare(b.fishName || ''),
         );
         break;
       case 'recent':
         result.sort(
-          (a, b) => new Date(b.updated_at) - new Date(a.updated_at),
+          (a, b) => new Date(b.date) - new Date(a.date),
         );
         break;
       default:
@@ -185,8 +214,8 @@ export default function MarketPriceScreen({ navigation }) {
   };
 
   const renderTrend = (item) => {
-    if (item.yesterday_price == null || item.price_per_kg == null) return null;
-    const diff = item.price_per_kg - item.yesterday_price;
+    if (item.yesterday_price == null || item.retailPrice == null) return null;
+    const diff = item.retailPrice - item.yesterday_price;
     if (diff === 0) return null;
     const isUp = diff > 0;
     return (
@@ -205,9 +234,9 @@ export default function MarketPriceScreen({ navigation }) {
 
   const renderPriceCard = ({ item }) => {
     const speciesName = lang === 'ta'
-      ? (item.species_tamil || item.species_name || 'தெரியாத வகை')
-      : (item.species_name || 'Unknown');
-    const speciesSub = lang === 'ta' && item.species_tamil ? item.species_name : (item.species_tamil || '');
+      ? (item.fishNameTamil || item.fishName || 'தெரியாத வகை')
+      : (item.fishName || 'Unknown');
+    const speciesSub = lang === 'ta' && item.fishNameTamil ? item.fishName : (item.fishNameTamil || '');
 
     return (
       <View style={styles.priceCard}>
@@ -217,11 +246,24 @@ export default function MarketPriceScreen({ navigation }) {
             {speciesSub ? <Text style={styles.speciesTamil}>{speciesSub}</Text> : null}
           </View>
           <View style={styles.priceBlock}>
-            <Text style={styles.priceValue}>
-              ₹{item.price_per_kg?.toFixed(0) ?? '—'}
-            </Text>
-            <Text style={styles.priceUnit}>/{t('market.perKg') || 'kg'}</Text>
-            {renderTrend(item)}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.priceLabel}>{lang === 'ta' ? 'மொத்த விலை' : 'Wholesale'}</Text>
+                <Text style={[styles.priceValue, { color: THEME.text }]}>
+                  ₹{item.wholesalePrice}
+                </Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.priceLabel}>{lang === 'ta' ? 'சில்லறை விலை' : 'Retail'}</Text>
+                <Text style={styles.priceValue}>
+                  ₹{item.retailPrice}
+                </Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, justifyContent: 'flex-end' }}>
+              <Text style={styles.priceUnit}>/{t('market.perKg') || 'kg'}</Text>
+              {renderTrend(item)}
+            </View>
           </View>
         </View>
 
@@ -230,7 +272,7 @@ export default function MarketPriceScreen({ navigation }) {
         <View style={styles.cardFooter}>
           <View style={styles.footerItem}>
             <Ionicons name="storefront-outline" size={13} color={THEME.textMuted} />
-            <Text style={styles.footerText}>{item.market_name || '—'}</Text>
+            <Text style={styles.footerText}>{item.market || '—'}</Text>
           </View>
           <View style={styles.footerItem}>
             <Ionicons name="location-outline" size={13} color={THEME.textMuted} />
@@ -238,7 +280,7 @@ export default function MarketPriceScreen({ navigation }) {
           </View>
           <View style={styles.footerItem}>
             <Ionicons name="time-outline" size={13} color={THEME.textMuted} />
-            <Text style={styles.footerText}>{formatTime(item.updated_at)}</Text>
+            <Text style={styles.footerText}>{formatTime(item.date)}</Text>
           </View>
         </View>
       </View>
@@ -583,6 +625,13 @@ const styles = StyleSheet.create({
   },
   priceBlock: {
     alignItems: 'flex-end',
+  },
+  priceLabel: {
+    fontSize: 9,
+    color: THEME.textMuted,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+    marginBottom: 2,
   },
   priceValue: {
     fontSize: 22,

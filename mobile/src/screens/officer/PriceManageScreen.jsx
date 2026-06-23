@@ -7,7 +7,7 @@ import { ENDPOINTS } from '../../constants/api';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/colors';
 import { useLanguage } from '../../store/LanguageContext';
 
-const emptyForm = () => ({ species: '', speciesTamil: '', price: '', minPrice: '', maxPrice: '', unit: 'kg', market: '', district: '' });
+const emptyForm = () => ({ fishName: '', fishNameTamil: '', wholesalePrice: '', retailPrice: '', unit: 'kg', market: '', district: '' });
 
 export default function PriceManageScreen({ navigation }) {
   const { t, lang } = useLanguage();
@@ -42,13 +42,40 @@ export default function PriceManageScreen({ navigation }) {
   };
 
   const openCreate = () => { setEditItem(null); setForm(emptyForm()); setShowModal(true); };
-  const openEdit = (item) => { setEditItem(item); setForm({ species: item.species, speciesTamil: item.speciesTamil || '', price: String(item.price), minPrice: String(item.minPrice || ''), maxPrice: String(item.maxPrice || ''), unit: item.unit || 'kg', market: item.market, district: item.district }); setShowModal(true); };
+  const openEdit = (item) => {
+    setEditItem(item);
+    setForm({
+      fishName: item.fishName || item.species || '',
+      fishNameTamil: item.fishNameTamil || item.speciesTamil || '',
+      wholesalePrice: String(item.wholesalePrice !== undefined ? item.wholesalePrice : (item.minPrice || '')),
+      retailPrice: String(item.retailPrice !== undefined ? item.retailPrice : (item.price || '')),
+      unit: item.unit || 'kg',
+      market: item.market || '',
+      district: item.district || ''
+    });
+    setShowModal(true);
+  };
 
   const handleSave = async () => {
-    if (!form.species || !form.price || !form.market) { Alert.alert(t('common.required') || 'Required', lang === 'ta' ? 'மீன் வகை, விலை மற்றும் சந்தை தேவை' : 'Species, Price, and Market are required'); return; }
+    if (!form.fishName || !form.wholesalePrice || !form.retailPrice || !form.market || !form.district) {
+      Alert.alert(
+        t('common.required') || 'Required',
+        lang === 'ta'
+          ? 'மீன் பெயர், மொத்த விலை, சில்லறை விலை, சந்தை மற்றும் மாவட்டம் தேவை'
+          : 'Fish Name, Wholesale Price, Retail Price, Market, and District are required'
+      );
+      return;
+    }
     setSaving(true);
     try {
-      const payload = { ...form, price: parseFloat(form.price), minPrice: form.minPrice ? parseFloat(form.minPrice) : undefined, maxPrice: form.maxPrice ? parseFloat(form.maxPrice) : undefined };
+      const payload = {
+        fishName: form.fishName,
+        fishNameTamil: form.fishNameTamil,
+        market: form.market,
+        district: form.district,
+        wholesalePrice: parseFloat(form.wholesalePrice),
+        retailPrice: parseFloat(form.retailPrice),
+      };
       if (editItem) await api.put(`${ENDPOINTS.MARKET_PRICES}/${editItem._id}`, payload);
       else await api.post(ENDPOINTS.MARKET_PRICES, payload);
       setShowModal(false);
@@ -59,23 +86,42 @@ export default function PriceManageScreen({ navigation }) {
 
   const setField = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  const renderItem = ({ item }) => (
-    <View style={styles.card}>
-      <View style={styles.cardLeft}>
-        <Text style={styles.species}>{lang === 'ta' ? (item.speciesTamil || item.species) : item.species}</Text>
-        {lang !== 'ta' && item.speciesTamil ? <Text style={styles.speciesTamil}>{item.speciesTamil}</Text> : null}
-        <Text style={styles.market}>{item.market} · {item.district}</Text>
+  const renderItem = ({ item }) => {
+    const fName = item.fishName || item.species || 'Unknown';
+    const fNameTamil = item.fishNameTamil || item.speciesTamil || '';
+    const wsPrice = item.wholesalePrice !== undefined ? item.wholesalePrice : (item.minPrice || 0);
+    const rtPrice = item.retailPrice !== undefined ? item.retailPrice : (item.price || 0);
+
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardLeft}>
+          <Text style={styles.species}>{lang === 'ta' ? (fNameTamil || fName) : fName}</Text>
+          {lang !== 'ta' && fNameTamil ? <Text style={styles.speciesTamil}>{fNameTamil}</Text> : null}
+          <Text style={styles.market}>{item.market} · {item.district}</Text>
+        </View>
+        <View style={styles.cardRight}>
+          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={{ fontSize: 9, color: COLORS.textSecondary, textTransform: 'uppercase' }}>
+                {lang === 'ta' ? 'மொத்தம்' : 'Wholesale'}
+              </Text>
+              <Text style={[styles.price, { fontSize: 16, color: COLORS.textPrimary }]}>₹{wsPrice}</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={{ fontSize: 9, color: COLORS.textSecondary, textTransform: 'uppercase' }}>
+                {lang === 'ta' ? 'சில்லறை' : 'Retail'}
+              </Text>
+              <Text style={styles.price}>₹{rtPrice}</Text>
+            </View>
+          </View>
+          <Text style={styles.unit}>/{lang === 'ta' ? 'கிலோ' : 'kg'}</Text>
+          <TouchableOpacity style={styles.editBtn} onPress={() => openEdit(item)}>
+            <Ionicons name="create-outline" size={14} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
-      <View style={styles.cardRight}>
-        <Text style={styles.price}>₹{item.price}</Text>
-        <Text style={styles.unit}>/{item.unit === 'kg' && lang === 'ta' ? 'கிலோ' : item.unit}</Text>
-        {item.minPrice && item.maxPrice && <Text style={styles.range}>{item.minPrice}–{item.maxPrice}</Text>}
-        <TouchableOpacity style={styles.editBtn} onPress={() => openEdit(item)}>
-          <Ionicons name="create-outline" size={14} color={COLORS.primary} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -108,12 +154,11 @@ export default function PriceManageScreen({ navigation }) {
           <View style={styles.modal}>
             <Text style={styles.modalTitle}>{editItem ? (lang === 'ta' ? 'விலையைத் திருத்து' : 'Edit Price') : (lang === 'ta' ? 'விலையைச் சேர்' : 'Add Price')}</Text>
             {[
-              ['species', lang === 'ta' ? 'மீன் வகை (ஆங்கிலம்)' : 'Species (English)', false], 
-              ['speciesTamil', lang === 'ta' ? 'மீன் வகை (தமிழ்)' : 'Species (Tamil)', false], 
-              ['price', lang === 'ta' ? 'விலை (₹)' : 'Price (₹)', true], 
-              ['minPrice', lang === 'ta' ? 'குறைந்தபட்ச விலை' : 'Min Price', true], 
-              ['maxPrice', lang === 'ta' ? 'அதிகபட்ச விலை' : 'Max Price', true], 
-              ['market', lang === 'ta' ? 'சந்தை பெயர்' : 'Market Name', false], 
+              ['fishName', lang === 'ta' ? 'மீன் பெயர் (ஆங்கிலம்)' : 'Fish Name (English)', false],
+              ['fishNameTamil', lang === 'ta' ? 'மீன் பெயர் (தமிழ்)' : 'Fish Name (Tamil)', false],
+              ['wholesalePrice', lang === 'ta' ? 'மொத்த விலை (₹)' : 'Wholesale Price (₹)', true],
+              ['retailPrice', lang === 'ta' ? 'சில்லறை விலை (₹)' : 'Retail Price (₹)', true],
+              ['market', lang === 'ta' ? 'சந்தை பெயர்' : 'Market Name', false],
               ['district', t('profile.district') || 'District', false]
             ].map(([key, label, numeric]) => (
               <View key={key} style={{ marginBottom: 12 }}>

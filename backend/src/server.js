@@ -3,8 +3,23 @@ const app = require('./app');
 const connectDB = require('./config/db');
 const { port } = require('./config/env');
 
+const { seedHistoricalPrices, syncDailyPrices } = require('./services/fmpis.service');
+
 const startServer = async () => {
   await connectDB();
+
+  // Seed historical fish price data
+  await seedHistoricalPrices();
+
+  // Schedule daily synchronization task (every 24 hours)
+  setInterval(async () => {
+    try {
+      console.log('🔄 Running daily fish market price sync...');
+      await syncDailyPrices();
+    } catch (err) {
+      console.error('❌ Daily sync error:', err.message);
+    }
+  }, 24 * 60 * 60 * 1000);
 
   const server = app.listen(port, () => {
     console.log(`\n🚀 KadalThunai API running on port ${port}`);

@@ -190,8 +190,18 @@ export const cacheMarketPrices = (prices) => {
       `INSERT OR REPLACE INTO market_prices_cache
         (server_id, species, species_tamil, price, min_price, max_price, unit, market, district, price_date)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [p._id || null, p.species, p.speciesTamil || null, p.price, p.minPrice || null,
-       p.maxPrice || null, p.unit || 'kg', p.market, p.district, p.priceDate]
+      [
+        p._id || p.id || null,
+        p.fishName || p.species || 'Unknown',
+        p.fishNameTamil || p.speciesTamil || p.species_tamil || null,
+        p.retailPrice !== undefined ? p.retailPrice : (p.price || 0),
+        p.wholesalePrice !== undefined ? p.wholesalePrice : (p.minPrice || p.min_price || null),
+        p.retailPrice !== undefined ? p.retailPrice : (p.maxPrice || p.max_price || null),
+        p.unit || 'kg',
+        p.market,
+        p.district,
+        p.date || p.priceDate || p.price_date || new Date().toISOString()
+      ]
     );
   }
 };
