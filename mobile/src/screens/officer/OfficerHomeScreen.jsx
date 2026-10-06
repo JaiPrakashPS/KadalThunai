@@ -239,7 +239,7 @@ export default function OfficerHomeScreen({ navigation }) {
   }, [loadData]);
 
   const handleOfficerAction = (screen) => {
-    if (['SOSMonitor', 'IncidentManage', 'ComplaintResolve'].includes(screen)) {
+    if (['SOSMonitor', 'OfflineMaps', 'ComplaintResolve'].includes(screen)) {
       navigation.navigate('Alerts', { screen });
     } else if (['SchemePublish', 'PriceManage', 'Broadcast'].includes(screen)) {
       navigation.navigate('Manage', { screen });
@@ -254,7 +254,7 @@ export default function OfficerHomeScreen({ navigation }) {
 
   const actions = [
     { icon: 'warning', label: lang === 'ta' ? 'SOS கண்காணி' : 'Monitor SOS', color: THEME.danger, screen: 'SOSMonitor' },
-    { icon: 'document-text', label: lang === 'ta' ? 'சம்பவங்கள்' : 'Incidents', color: THEME.warning, screen: 'IncidentManage' },
+    { icon: 'map', label: lang === 'ta' ? 'ஆஃப்லைன் வரைபடம்' : 'Offline Maps', color: THEME.warning, screen: 'OfflineMaps' },
     { icon: 'chatbubbles', label: lang === 'ta' ? 'புகார்கள்' : 'Complaints', color: THEME.primary, screen: 'ComplaintResolve' },
     { icon: 'ribbon', label: lang === 'ta' ? 'திட்டங்கள்' : 'Schemes', color: THEME.success, screen: 'SchemePublish' },
     { icon: 'pricetag', label: lang === 'ta' ? 'விலை நிலவரம்' : 'Prices', color: '#A78BFA', screen: 'PriceManage' },
@@ -415,13 +415,6 @@ export default function OfficerHomeScreen({ navigation }) {
                 color={THEME.danger}
                 badge={stats.activeSOS ?? 0}
                 onPress={() => handleOfficerAction('SOSMonitor')}
-              />
-              <StatCard
-                icon="alert-circle"
-                label={t('officer.incidents') || 'Open Incidents'}
-                value={stats.openIncidents ?? 0}
-                color={THEME.warning}
-                onPress={() => handleOfficerAction('IncidentManage')}
               />
               <StatCard
                 icon="chatbubble-ellipses"

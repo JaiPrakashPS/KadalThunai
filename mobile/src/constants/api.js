@@ -1,6 +1,6 @@
 // Your machine's Wi-Fi IP — both PC and phone must be on the same network
 // Run `ipconfig` to find your IPv4 address if this changes
-export const API_BASE_URL = 'http://10.50.177.123:5000/api/v1';
+export const API_BASE_URL = 'http://172.17.8.38:5000/api/v1';
 
 export const ENDPOINTS = {
   // Auth
@@ -31,11 +31,6 @@ export const ENDPOINTS = {
   SOS: '/sos',
   SOS_SYNC: '/sos/sync',
   SOS_STATUS: (id) => `/sos/${id}/status`,
-
-  // Incidents
-  INCIDENTS: '/incidents',
-  INCIDENTS_SYNC: '/incidents/sync',
-  INCIDENT_BY_ID: (id) => `/incidents/${id}`,
 
   // Complaints
   COMPLAINTS: '/complaints',

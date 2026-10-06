@@ -17,7 +17,7 @@ import MarketPriceScreen from '../screens/fisherman/MarketPriceScreen';
 import SchemesScreen from '../screens/fisherman/SchemesScreen';
 import LicenseScreen from '../screens/fisherman/LicenseScreen';
 import ComplaintScreen from '../screens/fisherman/ComplaintScreen';
-import IncidentScreen from '../screens/fisherman/IncidentScreen';
+import OfflineMapsScreen from '../screens/fisherman/OfflineMapsScreen';
 import CompassScreen from '../screens/fisherman/CompassScreen';
 import NearbyBoatsScreen from '../screens/fisherman/NearbyBoatsScreen';
 import RevenueScreen from '../screens/fisherman/RevenueScreen';
@@ -64,7 +64,7 @@ function MarketStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="MarketPrice" component={MarketPriceScreen} />
       <Stack.Screen name="Complaint" component={ComplaintScreen} />
-      <Stack.Screen name="Incident" component={IncidentScreen} />
+      <Stack.Screen name="OfflineMaps" component={OfflineMapsScreen} />
     </Stack.Navigator>
   );
 }

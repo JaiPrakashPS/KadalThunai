@@ -73,36 +73,6 @@ export const markSOSSynced = (localId, serverId) => {
   );
 };
 
-// ─── Incidents ───────────────────────────────────────────────────────────────
-
-export const saveIncidentOffline = (data) => {
-  const db = getDatabase();
-  const lat = data.location?.lat ?? data.location?.latitude ?? null;
-  const lng = data.location?.lng ?? data.location?.longitude ?? null;
-  const result = db.runSync(
-    `INSERT INTO incidents_offline (type, description, lat, lng, location_name, severity, image_uri, sync_status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
-    [
-      data.type, data.description, lat, lng,
-      data.location?.name || null, data.severity || 'medium', data.imageUri || null,
-    ]
-  );
-  return result.lastInsertRowId;
-};
-
-export const getPendingIncidents = () => {
-  const db = getDatabase();
-  return db.getAllSync(`SELECT * FROM incidents_offline WHERE sync_status = 'pending'`);
-};
-
-export const markIncidentSynced = (localId, serverId) => {
-  const db = getDatabase();
-  db.runSync(
-    `UPDATE incidents_offline SET sync_status = 'synced', server_id = ?, updated_at = datetime('now') WHERE local_id = ?`,
-    [serverId, localId]
-  );
-};
-
 // ─── Complaints ──────────────────────────────────────────────────────────────
 
 export const saveComplaintOffline = (data) => {
@@ -128,19 +98,20 @@ export const markComplaintSynced = (localId, serverId) => {
   );
 };
 
-// ─── Cache (zones, schemes, weather, prices) ─────────────────────────────────
+// ─── Fishing Recommendations Caching & Offline Helpers ──────────────────────────
 
 export const cacheFishingZones = (zones) => {
   const db = getDatabase();
+  db.runSync(`DELETE FROM fishing_zones_cache`);
   for (const z of zones) {
     db.runSync(
       `INSERT OR REPLACE INTO fishing_zones_cache
-        (server_id, name, name_tamil, coordinates, safety_level, description, recommended_species, center_lat, center_lng)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (server_id, species, abundance, lat, lng, reporter_name, notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        z._id, z.name, z.nameTamil || null, JSON.stringify(z.coordinates),
-        z.safetyLevel, z.description, JSON.stringify(z.recommendedSpecies || []),
-        z.centerPoint?.lat, z.centerPoint?.lng,
+        z._id, z.species, z.abundance || 'medium',
+        z.location?.lat, z.location?.lng,
+        z.fishermanId?.name || null, z.notes || null, z.createdAt || null
       ]
     );
   }
@@ -148,11 +119,55 @@ export const cacheFishingZones = (zones) => {
 
 export const getCachedFishingZones = () => {
   const db = getDatabase();
-  return db.getAllSync(`SELECT * FROM fishing_zones_cache`).map((z) => ({
-    ...z,
-    coordinates: JSON.parse(z.coordinates || '[]'),
-    recommendedSpecies: JSON.parse(z.recommended_species || '[]'),
+  const cached = db.getAllSync(`SELECT * FROM fishing_zones_cache`);
+  const pending = db.getAllSync(`SELECT * FROM fishing_zones_offline WHERE sync_status = 'pending'`);
+  
+  const mappedPending = pending.map(p => ({
+    _id: `pending_${p.local_id}`,
+    localId: p.local_id.toString(),
+    species: p.species,
+    abundance: p.abundance,
+    location: { lat: p.lat, lng: p.lng },
+    fishermanId: { name: 'You (Pending)' },
+    notes: p.notes,
+    createdAt: p.created_at,
+    isPending: true
   }));
+
+  const mappedCached = cached.map(c => ({
+    _id: c.server_id,
+    species: c.species,
+    abundance: c.abundance,
+    location: { lat: c.lat, lng: c.lng },
+    fishermanId: { name: c.reporter_name || 'Fisherman' },
+    notes: c.notes,
+    createdAt: c.created_at
+  }));
+
+  return [...mappedPending, ...mappedCached];
+};
+
+export const saveFishingZoneOffline = (data) => {
+  const db = getDatabase();
+  const result = db.runSync(
+    `INSERT INTO fishing_zones_offline (species, abundance, lat, lng, notes)
+     VALUES (?, ?, ?, ?, ?)`,
+    [data.species, data.abundance || 'medium', data.lat, data.lng, data.notes || null]
+  );
+  return result.lastInsertRowId;
+};
+
+export const getPendingFishingZones = () => {
+  const db = getDatabase();
+  return db.getAllSync(`SELECT * FROM fishing_zones_offline WHERE sync_status = 'pending'`);
+};
+
+export const markFishingZoneSynced = (localId, serverId) => {
+  const db = getDatabase();
+  db.runSync(
+    `UPDATE fishing_zones_offline SET sync_status = 'synced', server_id = ?, updated_at = datetime('now') WHERE local_id = ?`,
+    [serverId, localId]
+  );
 };
 
 // Accept both: cacheWeather(data)  or  cacheWeather(lat, lng, data)

@@ -8,152 +8,97 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Modal,
+  TextInput,
+  Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { UrlTile, Marker, Polygon, MAP_TYPES } from 'react-native-maps';
+import MapView, { UrlTile, LocalTile, Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../api/axios';
 import { ENDPOINTS } from '../../constants/api';
-import { getCachedFishingZones, cacheFishingZones } from '../../db/helpers';
+import { getCachedFishingZones, cacheFishingZones, saveFishingZoneOffline } from '../../db/helpers';
 import { useNetwork } from '../../store/NetworkContext';
 import { useLanguage } from '../../store/LanguageContext';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/colors';
 
 const { width, height } = Dimensions.get('window');
 const BOTTOM_SHEET_MIN = 80;
-const BOTTOM_SHEET_MAX = height * 0.45;
+const BOTTOM_SHEET_MAX = 300;
 
-const ZONE_COLORS = {
-  safe:       { fill: 'rgba(16, 185, 129, 0.25)', stroke: '#10B981' },
-  caution:    { fill: 'rgba(245, 158, 11, 0.25)',  stroke: '#F59E0B' },
-  restricted: { fill: 'rgba(239, 68, 68, 0.25)',   stroke: '#EF4444' },
-};
-
-const STATUS_META = {
-  safe:       { label: 'Safe',       icon: 'checkmark-circle', color: '#10B981' },
-  caution:    { label: 'Caution',    icon: 'warning',          color: '#F59E0B' },
-  restricted: { label: 'Restricted', icon: 'ban',              color: '#EF4444' },
-};
-
-// ─── Mock zone data (used as fallback) ───────────────────────────────────────
-const MOCK_ZONES = [
+// Default Mock Recommendations
+const MOCK_RECOMMENDATIONS = [
   {
-    id: 'z1',
-    name: 'Kovalam Bay Zone',
-    status: 'safe',
-    description: 'Excellent conditions. Fish density high. Tuna and Mackerel reported.',
-    recommendedFish: ['Tuna', 'Mackerel', 'Seer Fish'],
-    coordinates: [
-      { latitude: 8.42, longitude: 76.97 },
-      { latitude: 8.44, longitude: 77.02 },
-      { latitude: 8.40, longitude: 77.04 },
-      { latitude: 8.38, longitude: 76.99 },
-    ],
-    center: { latitude: 8.41, longitude: 77.005 },
-    depth: '40–80m',
-    waterTemp: '28°C',
-    lastUpdated: '2 hrs ago',
+    _id: 'mock_1',
+    species: 'Mackerel',
+    abundance: 'high',
+    location: { lat: 8.401, lng: 76.985 },
+    fishermanId: { name: 'Jai Kumar' },
+    notes: 'Heavy school of Mackerels noticed. Caught 45kg in 2 hours using gill nets.',
+    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
   },
   {
-    id: 'z2',
-    name: 'Vizhinjam Offshore',
-    status: 'caution',
-    description: 'Moderate swells. Proceed with care. Squid season active.',
-    recommendedFish: ['Squid', 'Pomfret'],
-    coordinates: [
-      { latitude: 8.38, longitude: 76.95 },
-      { latitude: 8.41, longitude: 76.98 },
-      { latitude: 8.37, longitude: 77.01 },
-      { latitude: 8.34, longitude: 76.97 },
-    ],
-    center: { latitude: 8.375, longitude: 76.978 },
-    depth: '80–150m',
-    waterTemp: '27°C',
-    lastUpdated: '4 hrs ago',
+    _id: 'mock_2',
+    species: 'Sardine',
+    abundance: 'high',
+    location: { lat: 8.368, lng: 76.962 },
+    fishermanId: { name: 'Karthik Raja' },
+    notes: 'Sardines are highly active here. Smooth currents.',
+    createdAt: new Date(Date.now() - 3600000 * 4).toISOString(),
   },
   {
-    id: 'z3',
-    name: 'Restricted Marine Reserve',
-    status: 'restricted',
-    description: 'Marine protected area. Fishing strictly prohibited. Heavy penalties apply.',
-    recommendedFish: [],
-    coordinates: [
-      { latitude: 8.46, longitude: 77.05 },
-      { latitude: 8.48, longitude: 77.09 },
-      { latitude: 8.44, longitude: 77.11 },
-      { latitude: 8.43, longitude: 77.07 },
-    ],
-    center: { latitude: 8.4525, longitude: 77.08 },
-    depth: '20–40m',
-    waterTemp: '29°C',
-    lastUpdated: '1 day ago',
+    _id: 'mock_3',
+    species: 'Pomfret',
+    abundance: 'medium',
+    location: { lat: 13.048, lng: 80.312 },
+    fishermanId: { name: 'Muthu Vel' },
+    notes: 'Pomfrets spotted in good quantities. Sea condition moderate.',
+    createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
   },
 ];
 
-// ─── Normalize Zone Data Helper ────────────────────────────────────────────────
 const normalizeZones = (rawZones) => {
   return rawZones.map((z) => {
     const id = z.id || z._id || z.server_id || Math.random().toString();
+    const lat = z.location?.lat ?? z.lat ?? 8.4;
+    const lng = z.location?.lng ?? z.lng ?? 77.0;
     
-    let status = z.status || z.safetyLevel || z.safety_level || 'safe';
-    if (status === 'danger') status = 'restricted';
-
-    let coords = [];
-    const rawCoords = z.coordinates || [];
-    if (Array.isArray(rawCoords)) {
-      coords = rawCoords.map((c) => {
-        const lat = c.lat ?? c.latitude;
-        const lng = c.lng ?? c.longitude;
-        return { latitude: Number(lat), longitude: Number(lng) };
-      });
-    }
-
-    let center = null;
-    const centerLat = z.center?.latitude ?? z.centerPoint?.lat ?? z.center_lat ?? null;
-    const centerLng = z.center?.longitude ?? z.centerPoint?.lng ?? z.center_lng ?? null;
-    if (centerLat !== null && centerLng !== null) {
-      center = { latitude: Number(centerLat), longitude: Number(centerLng) };
-    } else if (coords.length > 0) {
-      const sumLat = coords.reduce((sum, c) => sum + c.latitude, 0);
-      const sumLng = coords.reduce((sum, c) => sum + c.longitude, 0);
-      center = {
-        latitude: sumLat / coords.length,
-        longitude: sumLng / coords.length,
-      };
-    } else {
-      center = { latitude: 8.4, longitude: 77.0 };
-    }
-
-    const name = z.name || '';
-    const nameTamil = z.nameTamil || z.name_tamil || z.name || '';
-    const description = z.description || '';
-    const descriptionTamil = z.descriptionTamil || z.description_tamil || z.description || '';
-
-    const depth = z.depth || (z.depthRangeMeters ? `${z.depthRangeMeters.min}–${z.depthRangeMeters.max}m` : '30–60m');
-    const waterTemp = z.waterTemp || '28°C';
-    const lastUpdated = z.lastUpdated || '2 hrs ago';
-    const recommendedFish = z.recommendedFish || z.recommendedSpecies || z.recommended_species || [];
-
     return {
       id,
-      name,
-      nameTamil,
-      status,
-      description,
-      descriptionTamil,
-      coordinates: coords,
-      center,
-      depth,
-      waterTemp,
-      lastUpdated,
-      recommendedFish,
+      species: z.species || 'Unknown Fish',
+      abundance: z.abundance || 'medium',
+      latitude: Number(lat),
+      longitude: Number(lng),
+      reporterName: z.fishermanId?.name || z.reporter_name || 'Fisherman',
+      notes: z.notes || '',
+      createdAt: z.createdAt || z.created_at || new Date().toISOString(),
+      isPending: !!z.isPending,
     };
   });
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
+const getAbundanceColor = (level) => {
+  if (level === 'high') return COLORS.success;
+  if (level === 'medium') return COLORS.secondary;
+  return COLORS.info;
+};
+
+const formatTimeAgo = (dateStr) => {
+  try {
+    const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000);
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  } catch {
+    return 'Recently';
+  }
+};
+
 export default function FishingZoneScreen() {
   const mapRef = useRef(null);
   const sheetAnim = useRef(new Animated.Value(BOTTOM_SHEET_MIN)).current;
@@ -166,29 +111,45 @@ export default function FishingZoneScreen() {
   const [loading, setLoading] = useState(true);
   const [userLocation, setUserLocation] = useState(null);
   const [sheetExpanded, setSheetExpanded] = useState(false);
+  const [isMapDownloaded, setIsMapDownloaded] = useState(false);
+
+  // Report Modal state
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportSpecies, setReportSpecies] = useState('');
+  const [reportAbundance, setReportAbundance] = useState('medium');
+  const [reportNotes, setReportNotes] = useState('');
+  const [reporting, setReporting] = useState(false);
+
+  const tilesDir = `${FileSystem.documentDirectory}tiles/`;
+  const pathTemplate = `${tilesDir}{z}/{x}/{y}.png`;
+  const localPathTemplate = Platform.OS === 'android' ? pathTemplate.replace('file://', '') : pathTemplate;
 
   const initialRegion = {
     latitude: 8.4,
     longitude: 77.0,
-    latitudeDelta: 0.18,
-    longitudeDelta: 0.18,
+    latitudeDelta: 0.25,
+    longitudeDelta: 0.25,
   };
 
-  // ── Location ──────────────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        setUserLocation({
+        const coords = {
           latitude: loc.coords.latitude,
           longitude: loc.coords.longitude,
-        });
+        };
+        setUserLocation(coords);
+        // Focus map to user
+        mapRef.current?.animateToRegion(
+          { ...coords, latitudeDelta: 0.2, longitudeDelta: 0.2 },
+          1000
+        );
       }
     })();
   }, []);
 
-  // ── Load zones ────────────────────────────────────────────────────────────
   useEffect(() => {
     loadZones();
   }, [isConnected]);
@@ -196,9 +157,12 @@ export default function FishingZoneScreen() {
   const loadZones = async () => {
     setLoading(true);
     try {
+      const status = await AsyncStorage.getItem('@KadalThunai:offline_map_downloaded');
+      setIsMapDownloaded(status === 'true');
+
       if (isConnected) {
-        const res = await api.get(ENDPOINTS.FISHING_ZONES);
-        const rawData = res.data?.data || MOCK_ZONES;
+        const res = await api.get('/fishing-zones');
+        const rawData = res.data?.data || MOCK_RECOMMENDATIONS;
         const normalized = normalizeZones(rawData);
         await cacheFishingZones(rawData);
         setZones(normalized);
@@ -209,10 +173,10 @@ export default function FishingZoneScreen() {
     } catch (err) {
       try {
         const cached = await getCachedFishingZones();
-        const rawData = cached?.length ? cached : MOCK_ZONES;
+        const rawData = cached?.length ? cached : MOCK_RECOMMENDATIONS;
         setZones(normalizeZones(rawData));
       } catch (e) {
-        setZones(normalizeZones(MOCK_ZONES));
+        setZones(normalizeZones(MOCK_RECOMMENDATIONS));
       }
       setIsOffline(true);
     } finally {
@@ -220,7 +184,6 @@ export default function FishingZoneScreen() {
     }
   };
 
-  // ── Bottom sheet animation ────────────────────────────────────────────────
   const openSheet = (zone) => {
     setSelectedZone(zone);
     Animated.spring(sheetAnim, {
@@ -233,12 +196,12 @@ export default function FishingZoneScreen() {
 
     mapRef.current?.animateToRegion(
       {
-        latitude: zone.center.latitude - 0.04,
-        longitude: zone.center.longitude,
-        latitudeDelta: 0.12,
-        longitudeDelta: 0.12,
+        latitude: zone.latitude - 0.04,
+        longitude: zone.longitude,
+        latitudeDelta: 0.15,
+        longitudeDelta: 0.15,
       },
-      500,
+      500
     );
   };
 
@@ -254,253 +217,347 @@ export default function FishingZoneScreen() {
     });
   };
 
+  const handleReportRecommendation = async () => {
+    if (!reportSpecies.trim()) {
+      Alert.alert(
+        lang === 'ta' ? 'மீன் வகை தேவை' : 'Species Required',
+        lang === 'ta' ? 'தயவுசெய்து மீன் வகையை உள்ளிடவும்.' : 'Please enter the fish species.'
+      );
+      return;
+    }
+
+    if (!userLocation) {
+      Alert.alert(
+        lang === 'ta' ? 'ஜிபிஎஸ் சிக்னல் இல்லை' : 'GPS Required',
+        lang === 'ta' ? 'உங்களது தற்போதைய இருப்பிடத்தை கண்டறிய இயலவில்லை.' : 'Unable to acquire your current GPS coordinates.'
+      );
+      return;
+    }
+
+    setReporting(true);
+    const recommendationData = {
+      species: reportSpecies.trim(),
+      abundance: reportAbundance,
+      notes: reportNotes.trim(),
+      lat: userLocation.latitude,
+      lng: userLocation.longitude,
+    };
+
+    try {
+      if (isConnected) {
+        await api.post('/fishing-zones', {
+          species: recommendationData.species,
+          abundance: recommendationData.abundance,
+          notes: recommendationData.notes,
+          location: { lat: recommendationData.lat, lng: recommendationData.lng },
+        });
+        Alert.alert(
+          lang === 'ta' ? 'வெற்றிகரமாக பகிரப்பட்டது' : 'Success',
+          lang === 'ta' ? 'உங்கள் மீன்பிடி பரிந்துரை மற்ற மீனவர்களுடன் பகிரப்பட்டது!' : 'Your fishing recommendation has been shared with other fishermen!'
+        );
+      } else {
+        // Save offline
+        await saveFishingZoneOffline(recommendationData);
+        Alert.alert(
+          lang === 'ta' ? 'ஆஃப்லைனில் சேமிக்கப்பட்டது' : 'Saved Offline',
+          lang === 'ta'
+            ? 'இணைய இணைப்பு இல்லாததால் பரிந்துரை ஆஃப்லைனில் சேமிக்கப்பட்டது. நெட்வொர்க் கிடைத்தவுடன் தானாக ஒத்திசைக்கப்படும்.'
+            : 'Saved offline. It will automatically sync to the server once internet is restored.'
+        );
+      }
+
+      // Reset Form & reload
+      setReportSpecies('');
+      setReportAbundance('medium');
+      setReportNotes('');
+      setReportModalVisible(false);
+      await loadZones();
+    } catch (err) {
+      Alert.alert(
+        lang === 'ta' ? 'பிழை' : 'Error',
+        lang === 'ta' ? 'பரிந்துரையை சேமிக்க முடியவில்லை.' : 'Failed to save recommendation.'
+      );
+      console.warn(err);
+    } finally {
+      setReporting(false);
+    }
+  };
+
   const centerOnUser = () => {
     if (userLocation) {
       mapRef.current?.animateToRegion(
-        { ...userLocation, latitudeDelta: 0.08, longitudeDelta: 0.08 },
-        600,
+        { ...userLocation, latitudeDelta: 0.1, longitudeDelta: 0.1 },
+        600
       );
     }
   };
 
-  // ── Render helpers ────────────────────────────────────────────────────────
-  const renderZoneMarker = (zone) => {
-    const meta = STATUS_META[zone.status];
-    return (
-      <Marker
-        key={`marker-${zone.id}`}
-        coordinate={zone.center}
-        onPress={() => openSheet(zone)}
-        anchor={{ x: 0.5, y: 0.5 }}
-      >
-        <View style={[styles.markerContainer, { borderColor: meta.color }]}>
-          <Ionicons name={meta.icon} size={18} color={meta.color} />
-        </View>
-      </Marker>
-    );
-  };
-
-  const renderZonePolygon = (zone) => {
-    const clr = ZONE_COLORS[zone.status];
-    return (
-      <Polygon
-        key={`poly-${zone.id}`}
-        coordinates={zone.coordinates}
-        fillColor={clr.fill}
-        strokeColor={clr.stroke}
-        strokeWidth={2}
-        tappable
-        onPress={() => openSheet(zone)}
-      />
-    );
-  };
+  const isMapOffline = isOffline || !isConnected;
 
   return (
     <View style={styles.container}>
-      {/* ── Map ──────────────────────────────────────────────────────────── */}
+      {/* Map View */}
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
         initialRegion={initialRegion}
-        mapType={Platform.OS === 'android' ? 'none' : 'standard'}
+        mapType={isMapOffline && isMapDownloaded && Platform.OS === 'android' ? 'none' : 'standard'}
         showsUserLocation={!!userLocation}
         showsMyLocationButton={false}
         showsCompass={false}
+        minZoomLevel={7}
+        maxZoomLevel={isMapOffline && isMapDownloaded ? 10 : 19}
       >
-        <UrlTile
-          urlTemplate="https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
-          maximumZ={19}
-          flipY={false}
-          tileSize={256}
-        />
-        {zones.map(renderZonePolygon)}
-        {zones.map(renderZoneMarker)}
+        {isMapOffline && isMapDownloaded ? (
+          <LocalTile pathTemplate={localPathTemplate} tileSize={256} zIndex={1} />
+        ) : (
+          <UrlTile
+            urlTemplate="https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+            maximumZ={19}
+            flipY={false}
+            tileSize={256}
+          />
+        )}
+
+        {/* Render crowd-sourced points */}
+        {zones.map((zone) => {
+          const color = getAbundanceColor(zone.abundance);
+          return (
+            <Marker
+              key={zone.id}
+              coordinate={{ latitude: zone.latitude, longitude: zone.longitude }}
+              onPress={() => openSheet(zone)}
+              anchor={{ x: 0.5, y: 0.5 }}
+            >
+              <View style={[styles.markerContainer, { borderColor: color }]}>
+                <Ionicons name="fish" size={16} color={color} />
+                {zone.isPending && (
+                  <View style={styles.pendingBadgeDot} />
+                )}
+              </View>
+            </Marker>
+          );
+        })}
       </MapView>
 
-      {/* ── Loading overlay ───────────────────────────────────────────────── */}
-      {loading && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>{t('zones.loading')}</Text>
-        </View>
-      )}
-
-      {/* ── Header ───────────────────────────────────────────────────────── */}
+      {/* Header Overlay */}
       <SafeAreaView edges={['top']} style={styles.headerWrapper}>
         <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>{t('zones.title')}</Text>
-            <Text style={styles.headerSub}>{zones.length} {t('zones.zonesLoaded')}</Text>
-          </View>
+          <Text style={styles.headerTitle}>
+            {lang === 'ta' ? 'மீன் வள பரிந்துரைகள்' : 'Fish Recommendations'}
+          </Text>
           {isOffline && (
-            <View style={styles.offlineBadge}>
-              <Ionicons name="cloud-offline-outline" size={12} color="#fff" />
-              <Text style={styles.offlineBadgeText}>{t('common.offline')}</Text>
+            <View style={styles.offlinePill}>
+              <Ionicons name="wifi-off" size={12} color="#fff" style={{ marginRight: 4 }} />
+              <Text style={styles.offlineText}>{lang === 'ta' ? 'ஆஃப்லைன்' : 'Offline'}</Text>
             </View>
           )}
         </View>
       </SafeAreaView>
 
-      {/* ── Legend ───────────────────────────────────────────────────────── */}
-      <View style={styles.legend}>
-        {Object.entries(STATUS_META).map(([key, val]) => (
-          <View key={key} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: val.color }]} />
-            <Text style={styles.legendText}>{t('zones.' + key)}</Text>
-          </View>
-        ))}
+      {/* Loading Overlay */}
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>
+            {lang === 'ta' ? 'பரிந்துரைகளை ஏற்றுகிறது...' : 'Loading recommendations...'}
+          </Text>
+        </View>
+      )}
+
+      {/* Floating Action Buttons */}
+      <View style={styles.fabContainer}>
+        {/* Recenter GPS */}
+        {userLocation && (
+          <TouchableOpacity style={styles.fabMini} onPress={centerOnUser} activeOpacity={0.85}>
+            <Ionicons name="locate" size={20} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+        )}
+
+        {/* Report Recommendation FAB */}
+        <TouchableOpacity
+          style={styles.fabMain}
+          onPress={() => setReportModalVisible(true)}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={24} color="#fff" />
+          <Text style={styles.fabText}>
+            {lang === 'ta' ? 'பரிந்துரை சேர்' : 'Report Catch'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* ── My location button ────────────────────────────────────────────── */}
-      <TouchableOpacity style={styles.locationBtn} onPress={centerOnUser} activeOpacity={0.8}>
-        <Ionicons name="locate" size={22} color={COLORS.primary} />
-      </TouchableOpacity>
+      {/* Bottom Sheet Detail View */}
+      {selectedZone && (
+        <Animated.View style={[styles.bottomSheet, { height: sheetAnim }]}>
+          <View style={styles.sheetHandleWrapper}>
+            <View style={styles.sheetHandle} />
+          </View>
 
-      {/* ── Refresh button ────────────────────────────────────────────────── */}
-      <TouchableOpacity style={styles.refreshBtn} onPress={loadZones} activeOpacity={0.8}>
-        <Ionicons name="refresh" size={20} color="#94A3B8" />
-      </TouchableOpacity>
-
-      {/* ── Bottom Sheet ──────────────────────────────────────────────────── */}
-      <Animated.View style={[styles.bottomSheet, { height: sheetAnim }]}>
-        {/* Handle */}
-        <View style={styles.sheetHandle} />
-
-        {selectedZone ? (
-          <ScrollView
-            style={styles.sheetScroll}
-            showsVerticalScrollIndicator={false}
-            bounces={false}
-          >
-            {/* Zone header */}
-            <View style={styles.zoneHeader}>
-              <View style={styles.zoneHeaderLeft}>
-                <View
-                  style={[
-                    styles.zoneStatusBadge,
-                    { backgroundColor: STATUS_META[selectedZone.status].color + '22' },
-                  ]}
-                >
-                  <Ionicons
-                    name={STATUS_META[selectedZone.status].icon}
-                    size={14}
-                    color={STATUS_META[selectedZone.status].color}
-                  />
-                  <Text
-                    style={[
-                      styles.zoneStatusText,
-                      { color: STATUS_META[selectedZone.status].color },
-                    ]}
-                  >
-                    {t('zones.' + selectedZone.status)}
-                  </Text>
-                </View>
-                <Text style={styles.zoneName}>
-                  {lang === 'ta' ? (selectedZone.nameTamil || selectedZone.name_tamil || selectedZone.name) : selectedZone.name}
+          <View style={styles.sheetContent}>
+            {/* Title / Species */}
+            <View style={styles.sheetHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sheetSpecies}>🐟 {selectedZone.species}</Text>
+                <Text style={styles.sheetReporter}>
+                  {lang === 'ta' ? 'பகிர்ந்தவர்: ' : 'Reported by: '}{selectedZone.reporterName}
                 </Text>
               </View>
               <TouchableOpacity onPress={closeSheet} style={styles.closeBtn}>
-                <Ionicons name="close" size={20} color="#94A3B8" />
+                <Ionicons name="close" size={20} color={COLORS.textSecondary} />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.zoneDesc}>
-              {lang === 'ta' ? (selectedZone.descriptionTamil || selectedZone.description_tamil || selectedZone.description) : selectedZone.description}
-            </Text>
-
-            {/* Stat row */}
-            <View style={styles.zoneStatRow}>
-              <View style={styles.zoneStat}>
-                <Ionicons name="water-outline" size={16} color="#0066CC" />
-                <Text style={styles.zoneStatLabel}>{t('zones.depth')}</Text>
-                <Text style={styles.zoneStatValue}>{selectedZone.depth}</Text>
-              </View>
-              <View style={styles.zoneStatDivider} />
-              <View style={styles.zoneStat}>
-                <Ionicons name="thermometer-outline" size={16} color="#F59E0B" />
-                <Text style={styles.zoneStatLabel}>{t('zones.waterTemp')}</Text>
-                <Text style={styles.zoneStatValue}>{selectedZone.waterTemp}</Text>
-              </View>
-              <View style={styles.zoneStatDivider} />
-              <View style={styles.zoneStat}>
-                <Ionicons name="time-outline" size={16} color="#94A3B8" />
-                <Text style={styles.zoneStatLabel}>{t('zones.updated')}</Text>
-                <Text style={styles.zoneStatValue}>
-                  {selectedZone.lastUpdated === '2 hrs ago' ? (lang === 'ta' ? '2 மணி நேரம் முன்' : '2 hrs ago') :
-                   selectedZone.lastUpdated === '4 hrs ago' ? (lang === 'ta' ? '4 மணி நேரம் முன்' : '4 hrs ago') :
-                   selectedZone.lastUpdated === '1 day ago' ? (lang === 'ta' ? '1 நாள் முன்' : '1 day ago') :
-                   selectedZone.lastUpdated}
+            {/* Abundance Pill & Coordinates */}
+            <View style={styles.sheetStats}>
+              <View style={[styles.statBadge, { borderColor: getAbundanceColor(selectedZone.abundance) }]}>
+                <Text style={[styles.statValue, { color: getAbundanceColor(selectedZone.abundance) }]}>
+                  {selectedZone.abundance.toUpperCase()}
                 </Text>
+                <Text style={styles.statLabel}>{lang === 'ta' ? 'அளவு' : 'Abundance'}</Text>
+              </View>
+
+              <View style={styles.statBadge}>
+                <Text style={styles.statValue}>
+                  {selectedZone.latitude.toFixed(4)}, {selectedZone.longitude.toFixed(4)}
+                </Text>
+                <Text style={styles.statLabel}>{lang === 'ta' ? 'இருப்பிடம்' : 'Coordinates'}</Text>
+              </View>
+
+              <View style={styles.statBadge}>
+                <Text style={styles.statValue}>{formatTimeAgo(selectedZone.createdAt)}</Text>
+                <Text style={styles.statLabel}>{lang === 'ta' ? 'நேரம்' : 'Time'}</Text>
               </View>
             </View>
 
-            {/* Recommended fish */}
-            {selectedZone.recommendedFish?.length > 0 && (
-              <View style={styles.fishSection}>
-                <Text style={styles.fishSectionTitle}>
-                  <Ionicons name="fish-outline" size={14} color="#94A3B8" /> {t('zones.recommendedFish')}
-                </Text>
-                <View style={styles.fishChips}>
-                  {selectedZone.recommendedFish.map((f) => {
-                    const fishMap = {
-                      'Tuna': 'சூரை', 'Sardine': 'மத்தி', 'Mackerel': 'அயலை',
-                      'Pomfret': 'வாவல்', 'Prawn': 'இறால்', 'Squid': 'கணவாய்',
-                      'Seer Fish': 'நெய்மீன்'
-                    };
-                    const translatedFish = lang === 'ta' ? (fishMap[f] || f) : f;
-                    return (
-                      <View key={f} style={styles.fishChip}>
-                        <Text style={styles.fishChipText}>{translatedFish}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
-
-            {selectedZone.status === 'restricted' && (
-              <View style={styles.restrictedWarning}>
-                <Ionicons name="alert-circle" size={18} color="#EF4444" />
-                <Text style={styles.restrictedWarningText}>
-                  {t('zones.restrictedWarning')}
+            {/* Notes Section */}
+            {selectedZone.notes ? (
+              <ScrollView style={styles.notesSection}>
+                <Text style={styles.notesTitle}>{lang === 'ta' ? 'குறிப்புகள் / விவரங்கள்' : 'Fisherman Notes'}</Text>
+                <Text style={styles.notesBody}>"{selectedZone.notes}"</Text>
+              </ScrollView>
+            ) : (
+              <View style={styles.notesSection}>
+                <Text style={[styles.notesBody, { fontStyle: 'italic', color: COLORS.textMuted }]}>
+                  {lang === 'ta' ? 'கூடுதல் குறிப்புகள் ஏதுமில்லை.' : 'No additional notes provided.'}
                 </Text>
               </View>
             )}
-          </ScrollView>
-        ) : (
-          <View style={styles.sheetHint}>
-            <Ionicons name="hand-left-outline" size={24} color="#94A3B8" />
-            <Text style={styles.sheetHintText}>{t('zones.sheetHint')}</Text>
           </View>
-        )}
-      </Animated.View>
+        </Animated.View>
+      )}
+
+      {/* Add Recommendation Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={reportModalVisible}
+        onRequestClose={() => setReportModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Modal Title */}
+            <Text style={styles.modalTitle}>
+              {lang === 'ta' ? 'மீன் வள பரிந்துரை' : 'Report Catch Location'}
+            </Text>
+            <Text style={styles.modalSub}>
+              {lang === 'ta'
+                ? 'நீங்கள் அதிகமாக மீன் பிடித்த இடத்தைப் பகிர்ந்து மற்ற மீனவர்களுக்கு உதவலாம்.'
+                : 'Help other fishermen by marking coordinates where you found a heavy fish density.'}
+            </Text>
+
+            {/* Species Input */}
+            <Text style={styles.inputLabel}>{lang === 'ta' ? 'மீன் வகை (Species):' : 'Fish Species:'}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder={lang === 'ta' ? 'உதாரணம்: அயலை / மத்தி / வாவல்' : 'e.g. Mackerel, Sardine, Pomfret'}
+              placeholderTextColor={COLORS.textMuted}
+              value={reportSpecies}
+              onChangeText={setReportSpecies}
+            />
+
+            {/* Abundance Select */}
+            <Text style={styles.inputLabel}>{lang === 'ta' ? 'மீன் அடர்த்தி / அளவு:' : 'Abundance / Density:'}</Text>
+            <View style={styles.abundanceRow}>
+              {['low', 'medium', 'high'].map((level) => {
+                const active = reportAbundance === level;
+                const activeColor = getAbundanceColor(level);
+                return (
+                  <TouchableOpacity
+                    key={level}
+                    style={[
+                      styles.abundanceBtn,
+                      active && { backgroundColor: activeColor + '33', borderColor: activeColor },
+                    ]}
+                    onPress={() => setReportAbundance(level)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.abundanceText,
+                        { color: active ? activeColor : COLORS.textSecondary },
+                      ]}
+                    >
+                      {level.toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Notes Input */}
+            <Text style={styles.inputLabel}>{lang === 'ta' ? 'விவரம் (Notes):' : 'Catch Observations:'}</Text>
+            <TextInput
+              style={[styles.input, styles.inputArea]}
+              placeholder={lang === 'ta' ? 'அலைகள், தூண்டில்/வலை விவரம்...' : 'e.g. Swell state, net type, estimate caught (kg)...'}
+              placeholderTextColor={COLORS.textMuted}
+              value={reportNotes}
+              onChangeText={setReportNotes}
+              multiline
+              numberOfLines={3}
+            />
+
+            {/* Coordinates indicator */}
+            <View style={styles.coordsIndicator}>
+              <Ionicons name="location" size={14} color={COLORS.secondary} />
+              <Text style={styles.coordsIndicatorText}>
+                {userLocation
+                  ? `${userLocation.latitude.toFixed(5)}, ${userLocation.longitude.toFixed(5)} (Live)`
+                  : (lang === 'ta' ? 'ஜிபிஎஸ் தேடுகிறது...' : 'Acquiring GPS...')}
+              </Text>
+            </View>
+
+            {/* Buttons */}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnCancel]}
+                onPress={() => setReportModalVisible(false)}
+                disabled={reporting}
+              >
+                <Text style={styles.modalBtnTextCancel}>{lang === 'ta' ? 'ரத்து' : 'Cancel'}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnSubmit]}
+                onPress={handleReportRecommendation}
+                disabled={reporting || !userLocation}
+              >
+                {reporting ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.modalBtnText}>{lang === 'ta' ? 'பகிர்' : 'Submit'}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0A1628',
-  },
-
-  // Loading
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(10,22,40,0.75)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 99,
-    gap: 12,
-  },
-  loadingText: {
-    color: '#94A3B8',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-
-  // Header
+  container: { flex: 1, backgroundColor: COLORS.background },
   headerWrapper: {
     position: 'absolute',
     top: 0,
@@ -512,297 +569,204 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginHorizontal: 16,
-    marginTop: 8,
-    backgroundColor: 'rgba(15,32,68,0.92)',
-    borderRadius: 16,
-    paddingHorizontal: 16,
+    backgroundColor: COLORS.cardGlass,
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.md,
     paddingVertical: 12,
+    borderRadius: RADIUS.md,
     borderWidth: 1,
-    borderColor: '#1E3A5F',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    borderColor: COLORS.border,
   },
-  headerTitle: {
-    color: '#F1F5F9',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  headerSub: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  offlineBadge: {
+  headerTitle: { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary },
+  offlinePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F59E0B22',
-    borderColor: '#F59E0B',
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    backgroundColor: COLORS.sos,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
-  offlineBadgeText: {
-    color: '#F59E0B',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-
-  // Legend
-  legend: {
-    position: 'absolute',
-    top: 100,
-    right: 16,
-    backgroundColor: 'rgba(15,32,68,0.92)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#1E3A5F',
-    padding: 10,
-    gap: 6,
-    zIndex: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  legendText: {
-    color: '#F1F5F9',
-    fontSize: 11,
-    fontWeight: '500',
-  },
-
-  // Floating buttons
-  locationBtn: {
-    position: 'absolute',
-    right: 16,
-    bottom: BOTTOM_SHEET_MIN + 16,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(15,32,68,0.95)',
-    borderWidth: 1,
-    borderColor: '#1E3A5F',
-    alignItems: 'center',
+  offlineText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(10, 22, 40, 0.8)',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 6,
-    zIndex: 10,
-  },
-  refreshBtn: {
-    position: 'absolute',
-    right: 16,
-    bottom: BOTTOM_SHEET_MIN + 72,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(15,32,68,0.95)',
-    borderWidth: 1,
-    borderColor: '#1E3A5F',
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 6,
-    zIndex: 10,
+    zIndex: 20,
   },
-
-  // Marker
+  loadingText: { color: COLORS.textPrimary, fontSize: 13, marginTop: 12, fontWeight: '600' },
   markerContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 2,
-    backgroundColor: 'rgba(15,32,68,0.9)',
-    alignItems: 'center',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.background,
+    borderWidth: 2.5,
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-    elevation: 5,
+    alignItems: 'center',
+    ...SHADOWS.md,
   },
-
-  // Bottom sheet
+  pendingBadgeDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.secondary,
+  },
+  fabContainer: {
+    position: 'absolute',
+    bottom: BOTTOM_SHEET_MIN + 20,
+    right: SPACING.md,
+    alignItems: 'flex-end',
+    gap: SPACING.sm,
+    zIndex: 5,
+  },
+  fabMini: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...SHADOWS.md,
+  },
+  fabMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 25,
+    gap: 6,
+    ...SHADOWS.md,
+  },
+  fabText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   bottomSheet: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#0F2044',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: RADIUS.lg,
+    borderTopRightRadius: RADIUS.lg,
     borderTopWidth: 1,
-    borderTopColor: '#1E3A5F',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 16,
-    zIndex: 20,
-    overflow: 'hidden',
+    borderTopColor: COLORS.border,
+    ...SHADOWS.lg,
+    zIndex: 10,
+  },
+  sheetHandleWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    paddingVertical: 8,
   },
   sheetHandle: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#1E3A5F',
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 8,
+    backgroundColor: COLORS.border,
   },
-  sheetScroll: {
-    flex: 1,
-    paddingHorizontal: 16,
+  sheetContent: { flex: 1, paddingHorizontal: SPACING.md },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  sheetSpecies: { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary },
+  sheetReporter: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  closeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.backgroundLight,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  sheetHint: {
+  sheetStats: { flexDirection: 'row', gap: SPACING.sm, marginBottom: 16 },
+  statBadge: {
     flex: 1,
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  statValue: { fontSize: 12, fontWeight: '700', color: COLORS.textPrimary },
+  statLabel: { fontSize: 10, color: COLORS.textMuted, marginTop: 2 },
+  notesSection: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    borderColor: COLORS.border,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 20,
+  },
+  notesTitle: { fontSize: 11, fontWeight: '700', color: COLORS.textMuted, textTransform: 'uppercase', marginBottom: 4 },
+  notesBody: { fontSize: 13, color: COLORS.textPrimary, lineHeight: 18 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: width - 32,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOWS.lg,
+  },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 4 },
+  modalSub: { fontSize: 12, color: COLORS.textSecondary, lineHeight: 16, marginBottom: 16 },
+  inputLabel: { fontSize: 12, fontWeight: '600', color: COLORS.textMuted, marginBottom: 6 },
+  input: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    color: COLORS.textPrimary,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    marginBottom: 14,
+  },
+  inputArea: { height: 70, textAlignVertical: 'top' },
+  abundanceRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: 14 },
+  abundanceBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+  },
+  abundanceText: { fontSize: 11, fontWeight: '700' },
+  coordsIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 10,
+    borderRadius: RADIUS.md,
+    marginBottom: 16,
+  },
+  coordsIndicatorText: { fontSize: 12, color: COLORS.textPrimary, fontWeight: '600' },
+  modalButtons: { flexDirection: 'row', gap: SPACING.sm },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
   },
-  sheetHintText: {
-    color: '#94A3B8',
-    fontSize: 14,
-  },
-
-  // Zone detail
-  zoneHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  zoneHeaderLeft: {
-    flex: 1,
-    gap: 6,
-  },
-  zoneStatusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    alignSelf: 'flex-start',
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  zoneStatusText: {
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  zoneName: {
-    color: '#F1F5F9',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  closeBtn: {
-    padding: 4,
-    marginLeft: 8,
-  },
-  zoneDesc: {
-    color: '#94A3B8',
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  zoneStatRow: {
-    flexDirection: 'row',
-    backgroundColor: '#0A1628',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#1E3A5F',
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  zoneStat: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 14,
-    gap: 4,
-  },
-  zoneStatDivider: {
-    width: 1,
-    backgroundColor: '#1E3A5F',
-    marginVertical: 10,
-  },
-  zoneStatLabel: {
-    color: '#94A3B8',
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  zoneStatValue: {
-    color: '#F1F5F9',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  fishSection: {
-    marginBottom: 16,
-  },
-  fishSectionTitle: {
-    color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 8,
-  },
-  fishChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  fishChip: {
-    backgroundColor: '#0066CC22',
-    borderColor: '#0066CC55',
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-  },
-  fishChipText: {
-    color: '#60A5FA',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  restrictedWarning: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    backgroundColor: '#EF444422',
-    borderColor: '#EF444455',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-  },
-  restrictedWarningText: {
-    color: '#FCA5A5',
-    fontSize: 13,
-    flex: 1,
-    lineHeight: 18,
-  },
+  modalBtnCancel: { backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border },
+  modalBtnSubmit: { backgroundColor: COLORS.primary },
+  modalBtnTextCancel: { color: COLORS.textSecondary, fontWeight: '700', fontSize: 13 },
+  modalBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 });

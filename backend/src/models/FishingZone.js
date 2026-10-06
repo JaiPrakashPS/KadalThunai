@@ -2,49 +2,38 @@ const mongoose = require('mongoose');
 
 const fishingZoneSchema = new mongoose.Schema(
   {
-    name: {
-      type: String,
-      required: [true, 'Zone name is required'],
-      trim: true,
-    },
-    nameTamil: { type: String, trim: true },
-    coordinates: [
-      {
-        lat: { type: Number, required: true },
-        lng: { type: Number, required: true },
-      },
-    ],
-    centerPoint: {
-      lat: Number,
-      lng: Number,
-    },
-    description: { type: String, maxlength: 1000 },
-    descriptionTamil: { type: String },
-    safetyLevel: {
-      type: String,
-      enum: ['safe', 'caution', 'restricted', 'danger'],
-      default: 'safe',
-    },
-    recommendedSpecies: [String],
-    bestSeasons: [
-      {
-        type: String,
-        enum: ['January', 'February', 'March', 'April', 'May', 'June',
-               'July', 'August', 'September', 'October', 'November', 'December'],
-      },
-    ],
-    depthRangeMeters: {
-      min: Number,
-      max: Number,
-    },
-    distanceFromShoreKm: Number,
-    publishedBy: {
+    fishermanId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
+      required: [true, 'Fisherman ID is required'],
     },
+    location: {
+      lat: { type: Number, required: true },
+      lng: { type: Number, required: true },
+    },
+    species: {
+      type: String,
+      required: [true, 'Recommended species is required'],
+      trim: true,
+    },
+    abundance: {
+      type: String,
+      enum: ['high', 'medium', 'low'],
+      default: 'medium',
+    },
+    notes: { type: String, maxlength: 500 },
+    syncSource: {
+      type: String,
+      enum: ['local', 'server'],
+      default: 'server',
+    },
+    localId: String,
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
 );
+
+fishingZoneSchema.index({ 'location.lat': 1, 'location.lng': 1 });
+fishingZoneSchema.index({ fishermanId: 1 });
 
 module.exports = mongoose.model('FishingZone', fishingZoneSchema);

@@ -43,7 +43,6 @@ export default function DashboardPage() {
     { label: 'Active Boats', value: overview?.boats?.total || 0, icon: '⛵', color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
     { label: 'Total Catches', value: overview?.catches?.total || 0, icon: '🐟', color: '#3B82F6', bg: 'rgba(59,130,246,0.15)' },
     { label: 'SOS Pending', value: overview?.sos?.pending || 0, icon: '🆘', color: '#EF4444', bg: 'rgba(239,68,68,0.15)' },
-    { label: 'Open Incidents', value: overview?.incidents?.open || 0, icon: '⚠️', color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
     { label: 'Open Complaints', value: overview?.complaints?.open || 0, icon: '📋', color: '#8B5CF6', bg: 'rgba(139,92,246,0.15)' },
   ];
 

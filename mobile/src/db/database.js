@@ -56,19 +56,35 @@ export const initDatabase = async () => {
     );
   `);
 
-  // Fishing zones cache
+  // Fishing zones cache (recreated with point-marker structure)
   database.execSync(`
+    DROP TABLE IF EXISTS fishing_zones_cache;
     CREATE TABLE IF NOT EXISTS fishing_zones_cache (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       server_id TEXT UNIQUE NOT NULL,
-      name TEXT,
-      name_tamil TEXT,
-      coordinates TEXT,
-      safety_level TEXT,
-      description TEXT,
-      recommended_species TEXT,
-      center_lat REAL,
-      center_lng REAL,
+      species TEXT NOT NULL,
+      abundance TEXT DEFAULT 'medium',
+      lat REAL NOT NULL,
+      lng REAL NOT NULL,
+      reporter_name TEXT,
+      notes TEXT,
+      created_at TEXT,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  // Fishing zones offline queue
+  database.execSync(`
+    CREATE TABLE IF NOT EXISTS fishing_zones_offline (
+      local_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      server_id TEXT,
+      sync_status TEXT DEFAULT 'pending',
+      species TEXT NOT NULL,
+      abundance TEXT DEFAULT 'medium',
+      lat REAL NOT NULL,
+      lng REAL NOT NULL,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
   `);
@@ -108,24 +124,6 @@ export const initDatabase = async () => {
       message TEXT DEFAULT 'Emergency! Need immediate assistance.',
       emergency_type TEXT DEFAULT 'other',
       boat_id TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
-    );
-  `);
-
-  // Incidents offline write table
-  database.execSync(`
-    CREATE TABLE IF NOT EXISTS incidents_offline (
-      local_id INTEGER PRIMARY KEY AUTOINCREMENT,
-      server_id TEXT,
-      sync_status TEXT DEFAULT 'pending',
-      type TEXT NOT NULL,
-      description TEXT NOT NULL,
-      lat REAL,
-      lng REAL,
-      location_name TEXT,
-      severity TEXT DEFAULT 'medium',
-      image_uri TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );

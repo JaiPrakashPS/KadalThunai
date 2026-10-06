@@ -7,7 +7,6 @@ import DashboardPage from './pages/DashboardPage';
 import UsersPage from './pages/UsersPage';
 import OfficersPage from './pages/OfficersPage';
 import SOSPage from './pages/SOSPage';
-import IncidentsPage from './pages/IncidentsPage';
 import ComplaintsPage from './pages/ComplaintsPage';
 import SchemesPage from './pages/SchemesPage';
 import PricesPage from './pages/PricesPage';
@@ -38,7 +37,6 @@ function AppRoutes() {
         <Route path="users"         element={<UsersPage />} />
         <Route path="officers"      element={<OfficersPage />} />
         <Route path="sos"           element={<SOSPage />} />
-        <Route path="incidents"     element={<IncidentsPage />} />
         <Route path="complaints"    element={<ComplaintsPage />} />
         <Route path="schemes"       element={<SchemesPage />} />
         <Route path="prices"        element={<PricesPage />} />

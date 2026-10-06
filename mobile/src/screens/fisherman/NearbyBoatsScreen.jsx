@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { UrlTile, Marker } from 'react-native-maps';
+import MapView, { UrlTile, LocalTile, Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import * as FileSystem from 'expo-file-system/legacy';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../api/axios';
 import { ENDPOINTS } from '../../constants/api';
 import { useLanguage } from '../../store/LanguageContext';
+import { useNetwork } from '../../store/NetworkContext';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../../constants/colors';
 
 const BOAT_TYPE_COLORS = {
@@ -18,27 +21,38 @@ const BOAT_TYPE_COLORS = {
 
 export default function NearbyBoatsScreen({ navigation }) {
   const { t, lang } = useLanguage();
+  const { isConnected } = useNetwork();
   const [boats, setBoats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userLocation, setUserLocation] = useState(null);
   const [viewMode, setViewMode] = useState('map');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [isMapDownloaded, setIsMapDownloaded] = useState(false);
+
+  const tilesDir = `${FileSystem.documentDirectory}tiles/`;
+  const pathTemplate = `${tilesDir}{z}/{x}/{y}.png`;
+  const localPathTemplate = Platform.OS === 'android' ? pathTemplate.replace('file://', '') : pathTemplate;
 
   useEffect(() => {
     const init = async () => {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
+        const status = await AsyncStorage.getItem('@KadalThunai:offline_map_downloaded');
+        setIsMapDownloaded(status === 'true');
+
+        const { status: locStatus } = await Location.requestForegroundPermissionsAsync();
+        if (locStatus === 'granted') {
           const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
           setUserLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
         }
-        const res = await api.get(ENDPOINTS.BOATS, { params: { limit: 100 } });
-        setBoats(res.data.data || []);
+        if (isConnected) {
+          const res = await api.get(ENDPOINTS.BOATS, { params: { limit: 100 } });
+          setBoats(res.data.data || []);
+        }
       } catch (e) { console.warn(e.message); }
       finally { setLoading(false); }
     };
     init();
-  }, []);
+  }, [isConnected]);
 
   const types = ['all', 'mechanized', 'motorized', 'traditional', 'fiber'];
   const filtered = typeFilter === 'all' ? boats : boats.filter(b => b.type === typeFilter);
@@ -105,15 +119,21 @@ export default function NearbyBoatsScreen({ navigation }) {
         viewMode === 'map' ? (
           <MapView
             style={styles.map}
-            mapType="none"
+            mapType={!isConnected && isMapDownloaded && Platform.OS === 'android' ? 'none' : 'standard'}
             initialRegion={{
               latitude: userLocation?.lat || 11.0,
               longitude: userLocation?.lng || 79.8,
               latitudeDelta: 0.5,
               longitudeDelta: 0.5,
             }}
+            minZoomLevel={7}
+            maxZoomLevel={!isConnected && isMapDownloaded ? 10 : 19}
           >
-            <UrlTile urlTemplate="https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png" maximumZ={19} flipY={false} />
+            {!isConnected && isMapDownloaded ? (
+              <LocalTile pathTemplate={localPathTemplate} tileSize={256} zIndex={1} />
+            ) : (
+              <UrlTile urlTemplate="https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png" maximumZ={19} flipY={false} />
+            )}
             {userLocation && (
               <Marker coordinate={{ latitude: userLocation.lat, longitude: userLocation.lng }}>
                 <View style={styles.userMarker}><View style={styles.userMarkerDot} /></View>

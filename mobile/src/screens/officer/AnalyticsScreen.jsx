@@ -26,20 +26,17 @@ export default function AnalyticsScreen({ navigation }) {
   const { t, lang } = useLanguage();
   const [catchData, setCatchData] = useState(null);
   const [sosData, setSosData] = useState(null);
-  const [incidentData, setIncidentData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [c, s, i] = await Promise.all([
+        const [c, s] = await Promise.all([
           api.get(ENDPOINTS.ANALYTICS_CATCHES, { params: { year: new Date().getFullYear() } }),
           api.get(ENDPOINTS.ANALYTICS_SOS),
-          api.get(ENDPOINTS.ANALYTICS_INCIDENTS),
         ]);
         setCatchData(c.data.data);
         setSosData(s.data.data);
-        setIncidentData(i.data.data);
       } catch (e) { console.warn(e.message); }
       finally { setLoading(false); }
     };
@@ -140,29 +137,6 @@ export default function AnalyticsScreen({ navigation }) {
             </View>
           )}
 
-          {/* Incidents by Status */}
-          {incidentData?.byStatus?.length > 0 && (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>⚠️ {lang === 'ta' ? 'சம்பவங்கள் (நிலை வாரியாக)' : 'Incidents by Status'}</Text>
-              {incidentData.byStatus.map(s => {
-                const translatedStatus = s._id ? (
-                  s._id.toLowerCase() === 'pending' ? (t('sos.status.pending') || 'Pending') :
-                  s._id.toLowerCase() === 'in_progress' || s._id.toLowerCase() === 'in progress' ? (lang === 'ta' ? 'செயல்பாட்டில்' : 'In Progress') :
-                  s._id.toLowerCase() === 'resolved' ? (t('sos.status.resolved') || 'Resolved') :
-                  (lang === 'ta' ? 'நிராகரிக்கப்பட்டது' : 'Dismissed')
-                ) : (lang === 'ta' ? 'அறியப்படாதது' : 'Unknown');
-                return (
-                  <View key={s._id} style={styles.statusRow}>
-                    <Text style={styles.statusName}>{translatedStatus}</Text>
-                    <View style={styles.statusBar}>
-                      <View style={[styles.statusFill, { width: `${Math.min((s.count / (incidentData.byStatus.reduce((a, x) => a + x.count, 0) || 1)) * 100, 100)}%`, backgroundColor: COLORS.warning }]} />
-                    </View>
-                    <Text style={styles.statusCount}>{s.count}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          )}
         </ScrollView>
       )}
     </SafeAreaView>

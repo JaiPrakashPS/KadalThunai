@@ -9,7 +9,7 @@ import OfficerHomeScreen from '../screens/officer/OfficerHomeScreen';
 import FishermenListScreen from '../screens/officer/FishermenListScreen';
 import BoatMonitorScreen from '../screens/officer/BoatMonitorScreen';
 import SOSMonitorScreen from '../screens/officer/SOSMonitorScreen';
-import IncidentManageScreen from '../screens/officer/IncidentManageScreen';
+import OfflineMapsScreen from '../screens/fisherman/OfflineMapsScreen';
 import ComplaintResolveScreen from '../screens/officer/ComplaintResolveScreen';
 import SchemePublishScreen from '../screens/officer/SchemePublishScreen';
 import PriceManageScreen from '../screens/officer/PriceManageScreen';
@@ -37,7 +37,7 @@ function AlertStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="SOSMonitor" component={SOSMonitorScreen} />
-      <Stack.Screen name="IncidentManage" component={IncidentManageScreen} />
+      <Stack.Screen name="OfflineMaps" component={OfflineMapsScreen} />
       <Stack.Screen name="ComplaintResolve" component={ComplaintResolveScreen} />
     </Stack.Navigator>
   );

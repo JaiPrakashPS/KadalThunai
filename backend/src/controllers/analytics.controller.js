@@ -9,17 +9,15 @@ const getOverview = asyncHandler(async (req, res) => {
   const Catch      = require('../models/Catch');
   const SosRequest = require('../models/SosRequest');
   const Boat       = require('../models/Boat');
-  const Incident   = require('../models/Incident');
   const Complaint  = require('../models/Complaint');
 
-  const [fishermen, officers, catches, sosPending, sosTotal, boats, incidentOpen, complaintOpen] = await Promise.all([
+  const [fishermen, officers, catches, sosPending, sosTotal, boats, complaintOpen] = await Promise.all([
     safeCount(User, { role: 'fisherman' }),
     safeCount(User, { role: 'officer' }),
     safeCount(Catch),
     safeCount(SosRequest, { status: 'pending' }),
     safeCount(SosRequest),
     safeCount(Boat),
-    safeCount(Incident, { status: { $in: ['submitted', 'under_review'] } }),
     safeCount(Complaint, { status: { $in: ['open', 'under_review'] } }),
   ]);
 
@@ -31,7 +29,6 @@ const getOverview = asyncHandler(async (req, res) => {
       catches:    { total: catches },
       boats:      { total: boats },
       sos:        { total: sosTotal, pending: sosPending },
-      incidents:  { open: incidentOpen },
       complaints: { open: complaintOpen },
     },
   });
@@ -63,14 +60,4 @@ const getSOSAnalytics = asyncHandler(async (req, res) => {
   ]);
   res.json({ success: true, data: { byStatus, byType } });
 });
-
-const getIncidentAnalytics = asyncHandler(async (req, res) => {
-  const Incident = require('../models/Incident');
-  const [byStatus, bySeverity] = await Promise.all([
-    Incident.aggregate([{ $group: { _id: '$status',   count: { $sum: 1 } } }]),
-    Incident.aggregate([{ $group: { _id: '$severity', count: { $sum: 1 } } }]),
-  ]);
-  res.json({ success: true, data: { byStatus, bySeverity } });
-});
-
-module.exports = { getOverview, getCatchAnalytics, getSOSAnalytics, getIncidentAnalytics };
+module.exports = { getOverview, getCatchAnalytics, getSOSAnalytics };

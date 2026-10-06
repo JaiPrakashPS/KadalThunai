@@ -76,7 +76,7 @@ export default function HomeScreen({ navigation }) {
     { id: 'sos',     label: t('sos.title') || 'SOS',             icon: 'warning',         color: '#EF4444', route: 'SOS'           },
     { id: 'market',  label: t('market.title') || 'Market Prices',   icon: 'pricetag',        color: '#F59E0B', route: 'MarketPrices'  },
     { id: 'compass', label: t('compass.title') || 'Compass',         icon: 'compass',         color: '#8B5CF6', route: 'Compass'       },
-    { id: 'report',  label: t('incident.title') || 'Report Incident', icon: 'alert-circle',    color: '#EC4899', route: 'ReportIncident'},
+    { id: 'offline_maps', label: lang === 'ta' ? 'ஆஃப்லைன் வரைபடம்' : 'Offline Maps', icon: 'map', color: '#EC4899', route: 'OfflineMaps' },
   ];
 
   // ── Fetch Location ─────────────────────────────────────────────────────────
@@ -184,8 +184,8 @@ export default function HomeScreen({ navigation }) {
       navigation.navigate('Market', { screen: 'MarketPrice' });
     } else if (route === 'Compass') {
       navigation.navigate('Map', { screen: 'Compass' });
-    } else if (route === 'ReportIncident') {
-      navigation.navigate('Market', { screen: 'Incident' });
+    } else if (route === 'OfflineMaps') {
+      navigation.navigate('Market', { screen: 'OfflineMaps' });
     } else {
       navigation.navigate(route);
     }

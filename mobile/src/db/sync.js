@@ -3,8 +3,8 @@ import { ENDPOINTS } from '../constants/api';
 import {
   getPendingCatches, markCatchSynced,
   getPendingSOS, markSOSSynced,
-  getPendingIncidents, markIncidentSynced,
   getPendingComplaints, markComplaintSynced,
+  getPendingFishingZones, markFishingZoneSynced,
 } from './helpers';
 
 /**
@@ -12,7 +12,7 @@ import {
  * Called when network reconnects or app comes to foreground.
  */
 export const syncAllPending = async () => {
-  const results = { catches: 0, sos: 0, incidents: 0, complaints: 0, errors: [] };
+  const results = { catches: 0, sos: 0, complaints: 0, fishingZones: 0, errors: [] };
 
   try {
     // ── Sync catches ──
@@ -61,26 +61,6 @@ export const syncAllPending = async () => {
       }
     }
 
-    // ── Sync incidents ──
-    const pendingIncidents = getPendingIncidents();
-    if (pendingIncidents.length > 0) {
-      const mapped = pendingIncidents.map((i) => ({
-        localId: i.local_id.toString(),
-        type: i.type,
-        description: i.description,
-        location: i.lat ? { lat: i.lat, lng: i.lng, name: i.location_name } : null,
-        severity: i.severity,
-      }));
-
-      const res = await api.post(ENDPOINTS.INCIDENTS + '/sync', { records: mapped });
-      for (const r of res.data.data || []) {
-        if (r.success) {
-          markIncidentSynced(parseInt(r.localId), r.serverId);
-          results.incidents++;
-        }
-      }
-    }
-
     // ── Sync complaints ──
     const pendingComplaints = getPendingComplaints();
     if (pendingComplaints.length > 0) {
@@ -101,14 +81,34 @@ export const syncAllPending = async () => {
       }
     }
 
+    // ── Sync fishing zones crowd recommendations ──
+    const pendingZones = getPendingFishingZones();
+    if (pendingZones.length > 0) {
+      const mapped = pendingZones.map((z) => ({
+        localId: z.local_id.toString(),
+        species: z.species,
+        abundance: z.abundance,
+        location: { lat: z.lat, lng: z.lng },
+        notes: z.notes,
+      }));
+
+      const res = await api.post('/fishing-zones/sync', { records: mapped });
+      for (const r of res.data.data || []) {
+        if (r.success) {
+          markFishingZoneSynced(parseInt(r.localId), r.serverId);
+          results.fishingZones++;
+        }
+      }
+    }
+
   } catch (err) {
     results.errors.push(err.message);
     console.warn('⚠️ Sync error:', err.message);
   }
 
-  const totalSynced = results.catches + results.sos + results.incidents + results.complaints;
+  const totalSynced = results.catches + results.sos + results.complaints + results.fishingZones;
   if (totalSynced > 0) {
-    console.log(`✅ Synced: ${results.catches} catches, ${results.sos} SOS, ${results.incidents} incidents, ${results.complaints} complaints`);
+    console.log(`✅ Synced: ${results.catches} catches, ${results.sos} SOS, ${results.complaints} complaints, ${results.fishingZones} fishing recommendations`);
   }
 
   return results;

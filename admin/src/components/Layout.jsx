@@ -21,7 +21,6 @@ const NAV_GROUPS = [
     section: 'Operations',
     items: [
       { to: '/sos', icon: '🆘', label: 'SOS Alerts' },
-      { to: '/incidents', icon: '⚠️', label: 'Incidents' },
       { to: '/complaints', icon: '📋', label: 'Complaints' },
     ],
   },
@@ -46,7 +45,6 @@ const PAGE_TITLES = {
   '/users': 'Fishermen Management',
   '/officers': 'Officer Management',
   '/sos': 'SOS Alert Monitor',
-  '/incidents': 'Incident Reports',
   '/complaints': 'Complaint Resolution',
   '/schemes': 'Government Schemes',
   '/prices': 'Fish Market Prices',

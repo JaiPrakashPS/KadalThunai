@@ -76,15 +76,36 @@ const timeAgo = (dateStr) => {
 };
 
 const formatCoords = (location) => {
-  if (!location?.coordinates) return 'N/A';
-  return `${location.coordinates[1]?.toFixed(5)}, ${location.coordinates[0]?.toFixed(5)}`;
+  if (!location) return 'N/A';
+  if (location.lat !== undefined && location.lng !== undefined) {
+    return `${Number(location.lat).toFixed(5)}, ${Number(location.lng).toFixed(5)}`;
+  }
+  if (location.latitude !== undefined && location.longitude !== undefined) {
+    return `${Number(location.latitude).toFixed(5)}, ${Number(location.longitude).toFixed(5)}`;
+  }
+  if (location.coordinates && Array.isArray(location.coordinates)) {
+    return `${location.coordinates[1]?.toFixed(5)}, ${location.coordinates[0]?.toFixed(5)}`;
+  }
+  return 'N/A';
 };
 
 const openMaps = (location) => {
-  if (!location?.coordinates) return;
-  const [lng, lat] = location.coordinates;
-  const url = `https://maps.google.com/?q=${lat},${lng}`;
-  Linking.openURL(url).catch(() => {});
+  if (!location) return;
+  let lat, lng;
+  if (location.lat !== undefined && location.lng !== undefined) {
+    lat = location.lat;
+    lng = location.lng;
+  } else if (location.latitude !== undefined && location.longitude !== undefined) {
+    lat = location.latitude;
+    lng = location.longitude;
+  } else if (location.coordinates && Array.isArray(location.coordinates)) {
+    lat = location.coordinates[1];
+    lng = location.coordinates[0];
+  }
+  if (lat !== undefined && lng !== undefined) {
+    const url = `https://maps.google.com/?q=${lat},${lng}`;
+    Linking.openURL(url).catch(() => {});
+  }
 };
 
 function SOSCard({ item, onAction, onViewDetails }) {
@@ -93,6 +114,7 @@ function SOSCard({ item, onAction, onViewDetails }) {
   const statusKey = item.status?.charAt(0).toUpperCase() + item.status?.slice(1);
   const actions = STATUS_ACTIONS[statusKey] || STATUS_ACTIONS[item.status] || [];
   const urgColor = urgencyColor(item.urgency || item.priority);
+  const boat = item.boatId || item.boat;
 
   return (
     <View style={[styles.sosCard, { borderLeftColor: urgColor }]}>
@@ -120,6 +142,7 @@ function SOSCard({ item, onAction, onViewDetails }) {
           </View>
         </View>
 
+        {/* Fisherman Name */}
         <View style={styles.fisherRow}>
           <Ionicons name="person" size={15} color={THEME.primary} />
           <Text style={styles.fisherName}>
@@ -127,6 +150,7 @@ function SOSCard({ item, onAction, onViewDetails }) {
           </Text>
         </View>
 
+        {/* Phone */}
         {(item.fishermenId?.phone || item.userId?.phone || item.fisherman?.phone) && (
           <View style={styles.fisherRow}>
             <Ionicons name="call" size={13} color={THEME.textMuted} />
@@ -136,6 +160,15 @@ function SOSCard({ item, onAction, onViewDetails }) {
           </View>
         )}
 
+        {/* Boat Info directly on card */}
+        <View style={styles.fisherRow}>
+          <Ionicons name="boat" size={13} color={THEME.secondary} />
+          <Text style={styles.fisherMeta}>
+            {boat ? `${boat.name} [${boat.registrationNo || boat.registrationNumber || '—'}]` : (lang === 'ta' ? 'படகு: விவரம் இல்லை' : 'Boat: No Info')}
+          </Text>
+        </View>
+
+        {/* Location Coordinates */}
         <TouchableOpacity
           style={styles.locationRow}
           onPress={() => openMaps(item.location)}
@@ -154,30 +187,30 @@ function SOSCard({ item, onAction, onViewDetails }) {
         <View style={styles.expandedBody}>
           <View style={styles.divider} />
 
-          {item.boat && (
+          {boat && (
             <View style={styles.detailSection}>
               <Text style={styles.detailSectionTitle}>{lang === 'ta' ? 'படகு விவரங்கள்' : 'Boat Info'}</Text>
               <View style={styles.detailRow}>
                 <Text style={styles.detailKey}>{t('boat.name') || 'Name'}</Text>
-                <Text style={styles.detailVal}>{item.boat.name || '—'}</Text>
+                <Text style={styles.detailVal}>{boat.name || '—'}</Text>
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailKey}>{t('boat.regNo') || 'Registration'}</Text>
-                <Text style={styles.detailVal}>{item.boat.registrationNumber || '—'}</Text>
+                <Text style={styles.detailVal}>{boat.registrationNo || boat.registrationNumber || '—'}</Text>
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailKey}>{t('boat.type') || 'Type'}</Text>
                 <Text style={styles.detailVal}>
-                  {item.boat.type ? (t(`boat.types.${item.boat.type.toLowerCase()}`) || item.boat.type) : '—'}
+                  {boat.type ? (t(`boat.types.${boat.type.toLowerCase()}`) || boat.type) : '—'}
                 </Text>
               </View>
             </View>
           )}
 
-          {item.description && (
+          {(item.message || item.description) && (
             <View style={styles.detailSection}>
-              <Text style={styles.detailSectionTitle}>{lang === 'ta' ? 'விளக்கம்' : 'Description'}</Text>
-              <Text style={styles.descText}>{item.description}</Text>
+              <Text style={styles.detailSectionTitle}>{lang === 'ta' ? 'விளக்கம் / செய்தி' : 'Message / Description'}</Text>
+              <Text style={styles.descText}>{item.message || item.description}</Text>
             </View>
           )}
 
